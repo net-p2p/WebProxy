@@ -73,14 +73,9 @@ namespace WebProxy
         }
     }
 
-    public class Startup
+    public class Startup(IConfiguration configuration)
     {
-        public IConfiguration Configuration { get; }
-
-        public Startup(IConfiguration configuration)
-        {
-            Configuration = configuration;
-        }
+        public IConfiguration Configuration { get; } = configuration;
 
         // This method gets called by the runtime. Use this method to add services to the container.
         // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
@@ -92,6 +87,8 @@ namespace WebProxy
                 //.AddTransformFactory<W3CLoggerTransformFactory>()
                 .AddTransformFactory<DiyTypeTransformFactory>()
                 .AddConfigFilter<ProxyConfigFilter>();
+
+            services.AddRequestTimeouts();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -109,6 +106,9 @@ namespace WebProxy
             //app.UseW3CLogging();
 
             app.UseRouting();
+
+            app.UseRequestTimeouts();
+
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapReverseProxy();

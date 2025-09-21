@@ -4,8 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading.Tasks;
-using Tool.Utils.Data;
 
 namespace WebProxy.Entiy
 {
@@ -15,7 +13,7 @@ namespace WebProxy.Entiy
 
         public ServerCertificates()
         {
-            Certificates = new Dictionary<string, Certificates>();
+            Certificates = new Dictionary<string, Certificates>(StringComparer.OrdinalIgnoreCase);
         }
 
         public ServerCertificates(IConfiguration configuration, ILogger logger)
@@ -46,9 +44,9 @@ namespace WebProxy.Entiy
         {
             var sections = configuration.GetSection("HttpSsl").GetChildren();
 
-            if (!sections.Any()) { Certificates = new Dictionary<string, Certificates>(); return; } // throw new Exception("无法获取 HttpSsl 集合下的 配置信息，请查看配置文件！");
+            if (!sections.Any()) { Certificates = new Dictionary<string, Certificates>(StringComparer.OrdinalIgnoreCase); return; } // throw new Exception("无法获取 HttpSsl 集合下的 配置信息，请查看配置文件！");
 
-            Dictionary<string, Certificates> pairs = new();
+            Dictionary<string, Certificates> pairs = new(StringComparer.OrdinalIgnoreCase);
 
             foreach (var section in sections)
             {

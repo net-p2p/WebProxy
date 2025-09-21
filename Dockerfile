@@ -4,8 +4,8 @@
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
 USER $APP_UID
 WORKDIR /app
-EXPOSE 8080
-
+EXPOSE 7080
+ENV CONFIG_PATH=/config
 
 # 此阶段用于生成服务项目
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
@@ -26,4 +26,10 @@ RUN dotnet publish "./WebProxy.csproj" -c $BUILD_CONFIGURATION -o /app/publish /
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+
+# 仅容器需要的额外设置
+RUN mkdir /config /certs \
+    && chown -R $APP_UID:$APP_UID /config /certs \
+    && mv /app/appsettings*.json /config/ || true
+
 ENTRYPOINT ["dotnet", "WebProxy.dll"]

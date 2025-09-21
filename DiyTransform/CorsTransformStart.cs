@@ -1,16 +1,17 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
+using WebProxy.DiyTransform.Validate;
 using WebProxy.DiyTransformFactory;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.Transforms;
 
 namespace WebProxy.DiyTransform
 {
-    public class CorsTransform : DiyRequestTransform
+    public class CorsTransformStart : DiyRequestTransform
     {
         private readonly ILogger _logger;
         private bool _enabled;
@@ -19,7 +20,7 @@ namespace WebProxy.DiyTransform
         private string[] _allowHeaders;
         private bool _allowCredentials;
 
-        public CorsTransform(ILogger logger, bool enabled, string[] allowOrigins, string[] allowMethods, string[] allowHeaders, bool allowCredentials)
+        public CorsTransformStart(ILogger logger, bool enabled, string[] allowOrigins, string[] allowMethods, string[] allowHeaders, bool allowCredentials)
         {
             _logger = logger;
             _enabled = enabled;
@@ -126,42 +127,37 @@ namespace WebProxy.DiyTransform
                 }
             }
 
+            ValidateCors validate = new(_logger, transformValues, routeConfig);
+            if (validate.IsError)
+            {
+                _enabled = false;
+                return false;
+            }
+            else
+            {
+                _enabled = validate.Enabled;
+                _allowOrigins = validate.AllowOrigins;
+                _allowMethods = validate.AllowMethods;
+                _allowHeaders = validate.AllowHeaders;
+                _allowCredentials = validate.AllowCredentials;
+
+                if (_logger.IsEnabled(LogLevel.Debug)) _logger.LogDebug("CorsTransform updated: Enabled={Enabled}, AllowOrigin={AllowOrigin}, AllowMethods={AllowMethods}, AllowHeaders={AllowHeaders}, AllowCredentials={AllowCredentials}", _enabled, string.Join(",", _allowOrigins), string.Join(",", _allowMethods), string.Join(",", _allowHeaders), _allowCredentials);
+            }
+
             return updated || transformValues.ContainsKey("DiyType");
         }
 
-        public static bool CreateTransform(ILogger logger, ILoggerFactory factory, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig, out DiyRequestTransform transform)
+        public static TransformType CreateTransform(ILogger logger, ILoggerFactory factory, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig, out DiyRequestTransform transform)
         {
-            bool enabled = true;
-            if (transformValues.TryGetValue("Enabled", out var enabledValue) &&
-                !ValidateEnabled(enabledValue, out enabled))
+            ValidateCors validate = new(logger, transformValues, routeConfig);
+            if (validate.IsError)
             {
-                logger.LogError("Invalid Enabled value for CorsTransform: {EnabledValue}", enabledValue);
                 transform = null;
-                return false;
+                return TransformType.False;
             }
 
-            string[] allowOrigins = transformValues.TryGetValue("AllowOrigin", out var allowOriginValue)
-                ? allowOriginValue?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [] : [];
-
-            string[] allowMethods = transformValues.TryGetValue("AllowMethods", out var allowMethodsValue)
-                ? allowMethodsValue?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [] : [];
-
-            string[] allowHeaders = transformValues.TryGetValue("AllowHeaders", out var allowHeadersValue)
-                ? allowHeadersValue?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [] : [];
-
-            bool allowCredentials = false;
-            if (transformValues.TryGetValue("AllowCredentials", out var allowCredentialsValue))
-            {
-                if (!bool.TryParse(allowCredentialsValue, out allowCredentials))
-                {
-                    logger.LogError("Invalid AllowCredentials value for CorsTransform: {AllowCredentials}", allowCredentialsValue);
-                    transform = null;
-                    return false;
-                }
-            }
-
-            transform = new CorsTransform(factory.CreateLogger("CorsTransform"), enabled, allowOrigins, allowMethods, allowHeaders, allowCredentials);
-            return true;
+            transform = new CorsTransformStart(factory.CreateLogger(validate.LoggerName), validate.Enabled, validate.AllowOrigins, validate.AllowMethods, validate.AllowHeaders, validate.AllowCredentials);
+            return TransformType.True;
         }
 
         private static bool ValidateEnabled(string value, out bool result)

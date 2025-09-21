@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
@@ -50,7 +51,7 @@ namespace WebProxy
             {
                 throw new Exception($"{nameof(cluster)} 对象不能为空！");
             }
-            logger.LogInformation("{ClusterId}-->[{Hosts}] --> {Now}", route.ClusterId, string.Join(',', route.Match.Hosts), DateTime.Now.ToString("yy/MM/dd HH:mm:ss:fff"));
+            logger.LogInformation("{RouteId}.{ClusterId} [{Hosts}] --> {Now}", route.RouteId, route.ClusterId, string.Join(',', route.Match.Hosts), DateTime.Now.ToString("yy/MM/dd HH:mm:ss:fff"));
             return ValueTask.FromResult(route);
         }
 
@@ -83,12 +84,20 @@ namespace WebProxy
         {
             SetFormOptions(services);// 配置输入大小
 
+            services.AddRequestTimeouts(options =>
+            {
+                options.DefaultPolicy = new Microsoft.AspNetCore.Http.Timeouts.RequestTimeoutPolicy() { Timeout = TimeSpan.FromSeconds(100) };
+                for (int i = 1; i <= 60; i++)
+                {
+                    options.AddPolicy($"{i}s", TimeSpan.FromSeconds(i));
+                    options.AddPolicy($"{i}m", TimeSpan.FromMinutes(i));
+                }
+            });
+
             services.AddReverseProxy().LoadFromConfig(Configuration.GetSection("ReverseProxy"))
                 //.AddTransformFactory<W3CLoggerTransformFactory>()
                 .AddTransformFactory<DiyTypeTransformFactory>()
                 .AddConfigFilter<ProxyConfigFilter>();
-
-            services.AddRequestTimeouts();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -103,15 +112,14 @@ namespace WebProxy
                 app.UseExceptionHandler(AllException);
             }
 
-            //app.UseW3CLogging();
-
             app.UseRouting();
-
             app.UseRequestTimeouts();
-
             app.UseEndpoints(endpoints =>
             {
-                endpoints.MapReverseProxy();
+                endpoints.MapReverseProxy(proxyPipeline => 
+                {
+                   //注册其他中间件
+                });
             });
         }
 

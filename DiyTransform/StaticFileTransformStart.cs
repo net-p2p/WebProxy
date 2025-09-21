@@ -1,18 +1,20 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
+using Tool.Sockets.Kernels;
+using Tool.Utils;
+using WebProxy.DiyTransform.Validate;
+using WebProxy.DiyTransformFactory;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.Transforms;
-using Tool.Sockets.Kernels;
-using WebProxy.DiyTransformFactory;
 
 namespace WebProxy.DiyTransform
 {
-    public class StaticFileTransform : DiyRequestTransform
+    public class StaticFileTransformStart : DiyRequestTransform
     {
         private readonly ILogger _logger;
         private bool _enabled;
@@ -21,7 +23,7 @@ namespace WebProxy.DiyTransform
         private string _pathPrefix;
         private string _notFoundPage; // 新增字段：404页面
 
-        public StaticFileTransform(ILogger logger, bool enabled, string rootPath, string defaultFile, string pathPrefix, string notFoundPage)
+        public StaticFileTransformStart(ILogger logger, bool enabled, string rootPath, string defaultFile, string pathPrefix, string notFoundPage)
         {
             _logger = logger;
             _enabled = enabled;
@@ -122,7 +124,7 @@ namespace WebProxy.DiyTransform
                 if (ifNoneMatch == etag)
                 {
                     context.Response.StatusCode = StatusCodes.Status304NotModified;
-                    _logger.LogDebug("File not modified: {FilePath}, ETag: {ETag}", filePath, etag);
+                    if (_logger.IsEnabled(LogLevel.Debug)) _logger.LogDebug("File not modified: {FilePath}, ETag: {ETag}", filePath, etag);
                     return;
                 }
             }
@@ -236,8 +238,7 @@ namespace WebProxy.DiyTransform
                     context.Response.ContentLength = end - start + 1;
                     context.Response.Headers.ContentRange = $"bytes {start}-{end}/{fileLength}";
 
-                    _logger.LogDebug("Serving partial file: {FilePath}, Content-Type: {ContentType}, DefaultFile: {DefaultFile}, PathPrefix: {PathPrefix}, Range: {Range}, ETag: {ETag}",
-                        filePath, contentType, _defaultFile, _pathPrefix, rangeHeader, etag);
+                    if (_logger.IsEnabled(LogLevel.Debug)) _logger.LogDebug("Serving partial file: {FilePath}, Content-Type: {ContentType}, DefaultFile: {DefaultFile}, PathPrefix: {PathPrefix}, Range: {Range}, ETag: {ETag}", filePath, contentType, _defaultFile, _pathPrefix, rangeHeader, etag);
 
                     await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536, useAsync: true);
                     fileStream.Seek(start, SeekOrigin.Begin);
@@ -250,8 +251,7 @@ namespace WebProxy.DiyTransform
                     context.Response.StatusCode = StatusCodes.Status206PartialContent;
                     context.Response.ContentType = $"multipart/byteranges; boundary={boundary}";
 
-                    _logger.LogDebug("Serving multi-range file: {FilePath}, Content-Type: {ContentType}, DefaultFile: {DefaultFile}, PathPrefix: {PathPrefix}, Range: {Range}, ETag: {ETag}",
-                        filePath, contentType, _defaultFile, _pathPrefix, rangeHeader, etag);
+                    if (_logger.IsEnabled(LogLevel.Debug)) _logger.LogDebug("Serving multi-range file: {FilePath}, Content-Type: {ContentType}, DefaultFile: {DefaultFile}, PathPrefix: {PathPrefix}, Range: {Range}, ETag: {ETag}", filePath, contentType, _defaultFile, _pathPrefix, rangeHeader, etag);
 
                     await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536, useAsync: true);
                     foreach (var (start, end) in ranges)
@@ -282,8 +282,7 @@ namespace WebProxy.DiyTransform
                 context.Response.ContentLength = fileLength;
                 context.Response.ContentType = contentType;
 
-                _logger.LogDebug("Serving file: {FilePath}, Content-Type: {ContentType}, DefaultFile: {DefaultFile}, PathPrefix: {PathPrefix}, ETag: {ETag}",
-                    filePath, contentType, _defaultFile, _pathPrefix, etag);
+                if (_logger.IsEnabled(LogLevel.Debug)) _logger.LogDebug("Serving file: {FilePath}, Content-Type: {ContentType}, DefaultFile: {DefaultFile}, PathPrefix: {PathPrefix}, ETag: {ETag}", filePath, contentType, _defaultFile, _pathPrefix, etag);
 
                 await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536, useAsync: true);
                 await fileStream.CopyToAsync(context.Response.Body);
@@ -303,7 +302,7 @@ namespace WebProxy.DiyTransform
                 int read = await source.ReadAsync(buffer.Memory[..bytesToRead]);
                 if (read == 0)
                 {
-                    logger.LogWarning("Unexpected end of file stream while copying range, remaining: {Remaining}", remaining);
+                    if (logger.IsEnabled(LogLevel.Warning)) logger.LogWarning("Unexpected end of file stream while copying range, remaining: {Remaining}", remaining);
                     break; // 文件意外结束
                 }
 
@@ -311,133 +310,51 @@ namespace WebProxy.DiyTransform
                 remaining -= read;
                 totalRead += read;
 
-                logger.LogTrace("Read and wrote {Read} bytes, remaining: {Remaining}", read, remaining);
+                if (logger.IsEnabled(LogLevel.Trace)) logger.LogTrace("Read and wrote {Read} bytes, remaining: {Remaining}", read, remaining);
             }
 
             if (remaining > 0)
             {
-                logger.LogDebug("Copied {Bytes} bytes, less than requested {Length}", totalRead, length);
+                if (logger.IsEnabled(LogLevel.Debug)) logger.LogDebug("Copied {Bytes} bytes, less than requested {Length}", totalRead, length);
             }
             else
             {
-                logger.LogDebug("Copied {Bytes} bytes as requested", totalRead);
+                if (logger.IsEnabled(LogLevel.Debug)) logger.LogDebug("Copied {Bytes} bytes as requested", totalRead);
             }
         }
 
         public override bool ResetConf(IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig)
         {
-            bool updated = false;
-
-            if (transformValues.TryGetValue("Enabled", out var enabledValue))
+            ValidateStaticFile validate = new(_logger, transformValues, routeConfig);
+            if (validate.IsError)
             {
-                if (!ValidateEnabled(enabledValue, out bool newEnabled))
-                {
-                    _logger.LogError("Invalid Enabled value for StaticFileTransform: {EnabledValue}", enabledValue);
-                    return false;
-                }
-                _enabled = newEnabled;
-                updated = true;
-            }
-
-            if (transformValues.TryGetValue("RootPath", out var rootPath))
-            {
-                if (string.IsNullOrEmpty(rootPath))
-                {
-                    _logger.LogError("RootPath cannot be empty for StaticFileTransform");
-                    return false;
-                }
-                _rootPath = rootPath;
-                updated = true;
-            }
-
-            if (transformValues.TryGetValue("DefaultFile", out var defaultFile))
-            {
-                _defaultFile = string.IsNullOrEmpty(defaultFile) ? "index.html" : defaultFile;
-                updated = true;
-            }
-
-            if (transformValues.TryGetValue("NotFoundPage", out var notFoundPage))
-            {
-                _notFoundPage = notFoundPage; // 支持动态更新NotFoundPage
-                updated = true;
-            }
-
-            // 更新前缀
-            string newPathPrefix = ExtractPathPrefix(routeConfig?.Match?.Path);
-            if (newPathPrefix == null)
-            {
-                _logger.LogError("Invalid Match.Path for StaticFileTransform: {RoutePath}", routeConfig?.Match?.Path);
+                _enabled = false;
                 return false;
             }
-            if (_pathPrefix != newPathPrefix)
+            else
             {
-                _pathPrefix = newPathPrefix;
-                updated = true;
+                _enabled = validate.Enabled;
+                _notFoundPage = validate.NotFoundPage;
+                _defaultFile = validate.DefaultFile;
+                _rootPath = validate.RootPath;
+                _pathPrefix = validate.PathPrefix;
+                if (_logger.IsEnabled(LogLevel.Debug)) _logger.LogDebug("{TransformName} updated: Enabled={Enabled}, RootPath={RootPath}, DefaultFile={DefaultFile}, PathPrefix={PathPrefix}, NotFoundPage={NotFoundPage}", validate.TransformName, _enabled, _rootPath, _defaultFile, _pathPrefix, _notFoundPage);
             }
 
-            if (updated)
-            {
-                _logger.LogDebug("StaticFileTransform updated: Enabled={Enabled}, RootPath={RootPath}, DefaultFile={DefaultFile}, PathPrefix={PathPrefix}, NotFoundPage={NotFoundPage}",
-                    _enabled, _rootPath, _defaultFile, _pathPrefix, _notFoundPage);
-            }
-
-            return updated || transformValues.ContainsKey("DiyType");
-        }
-
-        public static bool CreateTransform(ILogger logger, ILoggerFactory factory, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig, out DiyRequestTransform transform)
-        {
-            bool enabled = true;
-            if (transformValues.TryGetValue("Enabled", out var enabledValue) &&
-                !ValidateEnabled(enabledValue, out enabled))
-            {
-                logger.LogError("Invalid Enabled value for StaticFileTransform: {EnabledValue}", enabledValue);
-                transform = null;
-                return false;
-            }
-
-            string rootPath = "wwwroot";
-            if (transformValues.TryGetValue("RootPath", out var rootPathValue))
-            {
-                if (string.IsNullOrEmpty(rootPathValue))
-                {
-                    logger.LogError("RootPath cannot be empty for StaticFileTransform");
-                    transform = null;
-                    return false;
-                }
-                rootPath = rootPathValue;
-            }
-
-            string defaultFile = "index.html";
-            if (transformValues.TryGetValue("DefaultFile", out var defaultFileValue))
-            {
-                defaultFile = string.IsNullOrEmpty(defaultFileValue) ? "index.html" : defaultFileValue;
-            }
-
-            string notFoundPage = null; // 默认无404页面
-            if (transformValues.TryGetValue("NotFoundPage", out var notFoundPageValue))
-            {
-                notFoundPage = notFoundPageValue;
-            }
-
-            // 从 RouteConfig 提取前缀
-            string pathPrefix = ExtractPathPrefix(routeConfig?.Match?.Path);
-            if (pathPrefix == null)
-            {
-                logger.LogError("Invalid Match.Path for StaticFileTransform: {RoutePath}", routeConfig?.Match?.Path);
-                transform = null;
-                return false;
-            }
-
-            transform = new StaticFileTransform(factory.CreateLogger("StaticFileTransform"), enabled, rootPath, defaultFile, pathPrefix, notFoundPage);
             return true;
         }
 
-        private static bool ValidateEnabled(string value, out bool result)
+        public static TransformType CreateTransform(ILogger logger, ILoggerFactory factory, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig, out DiyRequestTransform transform)
         {
-            result = string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
-            return value == null ||
-                   string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
+            ValidateStaticFile validate = new(logger, transformValues, routeConfig);
+            if (validate.IsError)
+            {
+                transform = null;
+                return TransformType.False;
+            }
+
+            transform = new StaticFileTransformStart(factory.CreateLogger(validate.LoggerName), validate.Enabled, validate.RootPath, validate.DefaultFile, validate.PathPrefix, validate.NotFoundPage);
+            return TransformType.True;
         }
 
         private static string GetContentType(string filePath)
@@ -455,45 +372,6 @@ namespace WebProxy.DiyTransform
                 ".json" => "application/json",
                 _ => "application/octet-stream"
             };
-        }
-
-        private static string ExtractPathPrefix(string routePath)
-        {
-            if (string.IsNullOrEmpty(routePath))
-            {
-                return "/";
-            }
-
-            // 查找 {**name} 或 {*name}
-            int catchAllIndex = routePath.IndexOf("{**", StringComparison.OrdinalIgnoreCase);
-            if (catchAllIndex == -1)
-            {
-                catchAllIndex = routePath.IndexOf("{*", StringComparison.OrdinalIgnoreCase);
-            }
-
-            if (catchAllIndex == -1)
-            {
-                return null; // 无动态占位符，不适合 StaticFileTransform
-            }
-
-            // 提取前缀
-            string prefix = routePath.Substring(0, catchAllIndex);
-            if (string.IsNullOrEmpty(prefix))
-            {
-                return "/";
-            }
-
-            // 确保前缀以 / 开头，末尾添加 /
-            if (!prefix.StartsWith('/'))
-            {
-                prefix = "/" + prefix;
-            }
-            if (!prefix.EndsWith('/'))
-            {
-                prefix += "/";
-            }
-
-            return prefix;
         }
     }
 }

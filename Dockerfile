@@ -7,6 +7,9 @@ WORKDIR /app
 EXPOSE 7080
 ENV CONFIG_PATH=/config
 
+#设置时间为中国上海
+ENV TZ=Asia/Shanghai
+
 # 此阶段用于生成服务项目
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release

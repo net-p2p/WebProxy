@@ -23,14 +23,14 @@ QQ:1477863629
     <DelaySign>True</DelaySign>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>.</DockerfileContext>
-  </PropertyGroup>
+</PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <Optimize>false</Optimize>
   </PropertyGroup>
   
   <ItemGroup>
-    <None Remove="MS~YM{HAPD~ST9NC%25JDPBJX.png" />
+    <None Remove="favicon.png" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,10 @@
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
+USER $APP_UID
+WORKDIR /app
+EXPOSE 7080
+ENV CONFIG_PATH=/config
+COPY . .
+RUN mkdir -p /config /certs \
+    && chown -R $APP_UID:$APP_UID /app /config /certs \
+    && mv /app/appsettings*.json /config/ || true
+ENTRYPOINT ["dotnet", "WebProxy.dll"]

@@ -10,7 +10,8 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV TZ=Asia/Shanghai
 ENV DOTNET_RUNNING_IN_CONTAINER=true
-ENV ASPNETCORE_HTTP_PORTS=7080
+ENV ASPNETCORE_URLS="http://*:7080"
+ENV ASPNETCORE_HTTP_PORTS=""
 
 # 创建目录结构
 RUN mkdir -p /app/bin /app/config /app/certs /app/Log /app/wwwroot

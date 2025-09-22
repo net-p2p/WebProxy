@@ -36,7 +36,11 @@ namespace WebProxy
                 {
                     if (Extensions.Exp.IsDocker)
                     {
-                        string dockerConfigPath = Path.Combine("config", "appsettings.json");
+                        // 关键一步：设置控制台输出编码为 UTF-8
+                        Console.OutputEncoding = Encoding.UTF8;
+                        Console.InputEncoding = Encoding.UTF8;
+
+                        string dockerConfigPath = Path.Combine("/app/config", "appsettings.json");
                         config.AddJsonFile(dockerConfigPath, optional: true, reloadOnChange: true);
                         config.AddEnvironmentVariables();
                         config.AddCommandLine(args);

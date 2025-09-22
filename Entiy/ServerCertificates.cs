@@ -76,7 +76,7 @@ namespace WebProxy.Entiy
         {
             if (IsDocker)
             {
-                string dockerConfigPath = Path.Combine("certs", path);
+                string dockerConfigPath = Path.Combine("/app/certs", path);
                 return dockerConfigPath;
             }
             return path;

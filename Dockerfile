@@ -13,7 +13,7 @@ ENV DOTNET_RUNNING_IN_CONTAINER=true
 ENV ASPNETCORE_HTTP_PORTS=7080
 
 # 创建目录结构
-RUN mkdir -p /app/bin /app/config /app/certs /app/logs /app/temp
+RUN mkdir -p /app/bin /app/config /app/certs /app/Log /app/wwwroot
 
 # 设置目录权限（使用环境变量中的APP_UID）
 RUN if [ -n "$APP_UID" ]; then \
@@ -49,6 +49,12 @@ WORKDIR /app
 
 # 从发布阶段复制构建结果到bin目录
 COPY --from=publish /app/publish ./bin/
+
+# 清理不必要的文件
+RUN find /app/bin -name "*.pdb" -delete \
+    && find /app/bin -name "*.xml" -delete \
+    && find /app/bin -name "*.config" -delete \
+    && rm -rf /app/bin/runtimes || true
 
 # 移动配置文件到config目录（使用条件判断）
 USER root

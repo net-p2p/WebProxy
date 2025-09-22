@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -49,7 +49,7 @@ namespace WebProxy
         {
             if (cluster is null)
             {
-                throw new Exception($"{nameof(cluster)} ¶ÔÏó²»ÄÜÎª¿Õ£¡");
+                throw new Exception($"{nameof(cluster)} å¯¹è±¡ä¸èƒ½ä¸ºç©ºï¼");
             }
             logger.LogInformation("{RouteId}.{ClusterId} [{Hosts}] --> {Now}", route.RouteId, route.ClusterId, string.Join(',', route.Match.Hosts), DateTime.Now.ToString("yy/MM/dd HH:mm:ss:fff"));
             return ValueTask.FromResult(route);
@@ -57,18 +57,18 @@ namespace WebProxy
 
         private void RegisterSsl()
         {
-            logger.LogInformation("Ssl Ö¤ÊéÔØÈë...");
-            Program.SslCertificates.Reset(Configuration, logger);//ÖØÐÂ×¢²áSslÖ¤Êé
-            logger.LogInformation("Ssl Ö¤ÊéÔØÈëÍê³É¡£");
+            logger.LogInformation("Ssl è¯ä¹¦è½½å…¥...");
+            Program.SslCertificates.Reset(Configuration, logger);//é‡æ–°æ³¨å†ŒSslè¯ä¹¦
+            logger.LogInformation("Ssl è¯ä¹¦è½½å…¥å®Œæˆã€‚");
         }
 
-        // ÉèÖÃÅäÖÃ±ä¸ü¼àÌý
+        // è®¾ç½®é…ç½®å˜æ›´ç›‘å¬
         void RegisterConfigChangeCallback()
         {
             var changeToken = Configuration.GetReloadToken();
             changeToken.RegisterChangeCallback(state =>
             {
-                RegisterSsl(); // ÖØÐÂ×¢²áÒÔ³ÖÐø¼àÌýºóÐø±ä¸ü
+                RegisterSsl(); // é‡æ–°æ³¨å†Œä»¥æŒç»­ç›‘å¬åŽç»­å˜æ›´
                 RegisterConfigChangeCallback();
             }, null);
         }
@@ -82,7 +82,7 @@ namespace WebProxy
         // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
         public void ConfigureServices(IServiceCollection services)
         {
-            SetFormOptions(services);// ÅäÖÃÊäÈë´óÐ¡
+            SetFormOptions(services);// é…ç½®è¾“å…¥å¤§å°
 
             services.AddRequestTimeouts(options =>
             {
@@ -118,7 +118,7 @@ namespace WebProxy
             {
                 endpoints.MapReverseProxy(proxyPipeline => 
                 {
-                   //×¢²áÆäËûÖÐ¼ä¼þ
+                   //æ³¨å†Œå…¶ä»–ä¸­é—´ä»¶
                 });
             });
         }
@@ -126,7 +126,7 @@ namespace WebProxy
         public async Task AllException(HttpContext context, Exception exception)
         {
             await context.Response.WriteAsync("An unknown error has occurred!");
-            Log.Error("²¶»ñÈ«¾ÖÒì³££º", exception);//"Log/Risk/"
+            Log.Error("æ•èŽ·å…¨å±€å¼‚å¸¸ï¼š", exception);//"Log/Risk/"
         }
 
         private void SetFormOptions(IServiceCollection services)
@@ -134,7 +134,7 @@ namespace WebProxy
             var sections = Configuration.GetSection("FormOptions");
             if (sections.GetChildren().Any())
             {
-                Console.WriteLine("FormOptions ÅäÖÃÔØÈë...");
+                Console.WriteLine("FormOptions é…ç½®è½½å…¥...");
 
                 services.SetFormOptions((config) =>
                 {

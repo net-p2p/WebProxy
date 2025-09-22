@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Hosting;
+ï»¿using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 #if !DOCKER
@@ -36,10 +36,6 @@ namespace WebProxy
                 {
                     if (Extensions.Exp.IsDocker)
                     {
-                        // ¹Ø¼üÒ»²½£ºÉèÖÃ¿ØÖÆÌ¨Êä³ö±àÂëÎª UTF-8
-                        Console.OutputEncoding = Encoding.UTF8;
-                        Console.InputEncoding = Encoding.UTF8;
-
                         string dockerConfigPath = Path.Combine("/app/config", "appsettings.json");
                         config.AddJsonFile(dockerConfigPath, optional: true, reloadOnChange: true);
                         config.AddEnvironmentVariables();
@@ -76,7 +72,7 @@ namespace WebProxy
                     logging.AddLogSave();
                 })
 #if !DOCKER
-                .UseWindowsService(conf => Environment.CurrentDirectory = AppContext.BaseDirectory) //È·±£³ÌĞò·ÃÎÊÔÚ°²×°Ä¿Â¼
+                .UseWindowsService(conf => Environment.CurrentDirectory = AppContext.BaseDirectory) //ç¡®ä¿ç¨‹åºè®¿é—®åœ¨å®‰è£…ç›®å½•
                 .UseSystemd()
 #endif
             ;
@@ -85,11 +81,11 @@ namespace WebProxy
         {
             var sections = configuration.GetSection("Server.Urls").GetChildren();
 
-            if (!sections.Any()) throw new Exception("ÎŞ·¨»ñÈ¡ Server.Urls ¼¯ºÏÏÂµÄ ÅäÖÃĞÅÏ¢£¬Çë²é¿´ÅäÖÃÎÄ¼ş£¡");
+            if (!sections.Any()) throw new Exception("æ— æ³•è·å– Server.Urls é›†åˆä¸‹çš„ é…ç½®ä¿¡æ¯ï¼Œè¯·æŸ¥çœ‹é…ç½®æ–‡ä»¶ï¼");
             List<string> usls = [];
             foreach (var section in sections)
             {
-                if (string.IsNullOrEmpty(section.Value)) throw new Exception("Server.Urls ¼¯ºÏÏÂµÄ ÅäÖÃĞÅÏ¢´æÔÚÎÊÌâ£¬Çë²é¿´ÅäÖÃÎÄ¼ş£¡");
+                if (string.IsNullOrEmpty(section.Value)) throw new Exception("Server.Urls é›†åˆä¸‹çš„ é…ç½®ä¿¡æ¯å­˜åœ¨é—®é¢˜ï¼Œè¯·æŸ¥çœ‹é…ç½®æ–‡ä»¶ï¼");
                 usls.Add(section.Value);
             }
 

@@ -14,15 +14,16 @@ QQ:1477863629
     <NeutralLanguage>zh-Hans</NeutralLanguage>
     <UserSecretsId>8263e7ab-48a8-4d0d-9c7f-471f237b9bf7</UserSecretsId>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
-    <Version>3.1.1</Version>
+    <Version>3.1.2</Version>
     <Authors>nixue</Authors>
-    <AssemblyVersion>2.9.6.1</AssemblyVersion>
-    <FileVersion>2.9.6.1</FileVersion>
+    <AssemblyVersion>2.9.7.1</AssemblyVersion>
+    <FileVersion>2.9.7.1</FileVersion>
     <SignAssembly>False</SignAssembly>
     <AssemblyOriginatorKeyFile></AssemblyOriginatorKeyFile>
     <DelaySign>True</DelaySign>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>.</DockerfileContext>
+    <Configurations>Debug;Release;Docker</Configurations>
 </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -34,11 +35,14 @@ QQ:1477863629
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.9" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.9" />
     <!--<PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />-->
     <PackageReference Include="Tool.Net" Version="5.5.2" />
     <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
+  </ItemGroup>
+  
+  <ItemGroup Condition="$(Configuration) != 'Docker'">
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.9" />
   </ItemGroup>
 
   <ItemGroup>

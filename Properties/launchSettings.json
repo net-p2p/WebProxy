@@ -1,12 +1,5 @@
 {
   "profiles": {
-    "IIS Express": {
-      "commandName": "IISExpress",
-      "launchBrowser": true,
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      }
-    },
     "WebProxy": {
       "commandName": "Project",
       "launchBrowser": true,
@@ -15,12 +8,6 @@
       },
       "dotnetRunMessages": true,
       "applicationUrl": "http://localhost:5000"
-    },
-    "Container (Dockerfile)": {
-      "commandName": "Docker",
-      "launchBrowser": true,
-      "launchUrl": "{Scheme}://{ServiceHost}:{ServicePort}",
-      "publishAllPorts": true
     }
   },
   "iisSettings": {

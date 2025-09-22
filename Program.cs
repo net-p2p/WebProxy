@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+#if !DOCKER
 using Microsoft.Extensions.Hosting.Systemd;
 using Microsoft.Extensions.Hosting.WindowsServices;
+#endif
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -70,8 +72,11 @@ namespace WebProxy
                 {
                     logging.AddLogSave();
                 })
+#if !DOCKER
                 .UseWindowsService(conf => Environment.CurrentDirectory = AppContext.BaseDirectory) //确保程序访问在安装目录
-                .UseSystemd();
+                .UseSystemd()
+#endif
+            ;
 
         private static string[] GetUrls(IConfiguration configuration)
         {

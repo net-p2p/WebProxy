@@ -20,9 +20,7 @@ ENV LC_ALL=C.UTF-8
 ENV TZ=Asia/Shanghai
 
 # 创建所需的目录结构（简化权限设置）
-RUN mkdir -p /app/bin /app/config /app/certs /app/logs /app/temp && \
-    chmod -R 755 /app
-
+RUN mkdir -p /app/bin /app/config /app/certs /app/logs /app/temp
 
 # 第二阶段：构建应用程序
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
@@ -52,18 +50,27 @@ WORKDIR /app
 COPY --from=publish /app/publish ./bin/
 
 # 清理不必要的文件
-RUN find /app/bin -name "*.pdb" -delete \
-    && find /app/bin -name "*.xml" -delete \
-    && find /app/bin -name "*.config" -delete \
-    && rm -rf /app/bin/runtimes || true
+RUN find /app/bin -name "*.pdb" -delete 2>/dev/null || true \
+    && find /app/bin -name "*.xml" -delete 2>/dev/null || true \
+    && find /app/bin -name "*.config" -delete 2>/dev/null || true \
+    && rm -rf /app/bin/runtimes 2>/dev/null || true
 
 # 创建配置目录并将配置文件移动到指定位置
 RUN mkdir -p /app/config \
     && mv /app/bin/appsettings*.json /app/config/ 2>/dev/null || true \
     && mv /app/bin/*.config /app/config/ 2>/dev/null || true
 
-# 设置目录权限（简化版本）
-RUN chmod -R 755 /app
+# 设置权限（逐步设置，避免递归权限问题）
+RUN chmod 755 /app && \
+    chmod -R 755 /app/bin && \
+    mkdir -p /app/config && \
+    chmod 755 /app/config && \
+    mkdir -p /app/certs && \
+    chmod 755 /app/certs && \
+    mkdir -p /app/logs && \
+    chmod 755 /app/logs && \
+    mkdir -p /app/temp && \
+    chmod 755 /app/temp
 
 # 设置入口点，指定从 bin 目录启动
 ENTRYPOINT ["dotnet", "/app/bin/WebProxy.dll"]

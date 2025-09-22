@@ -10,13 +10,13 @@ namespace WebProxy.Entiy
 {
     public class ServerCertificates
     {
-        private readonly string platform;
+        private readonly bool IsDocker;
 
         public IReadOnlyDictionary<string, Certificates> Certificates { get; private set; }
 
         public ServerCertificates()
         {
-            platform = Environment.GetEnvironmentVariable("Platform"); //为了兼容 docker 方式运行
+            IsDocker = Extensions.Exp.IsDocker; //为了兼容 docker 方式运行
             Certificates = new Dictionary<string, Certificates>(StringComparer.OrdinalIgnoreCase);
         }
 
@@ -74,7 +74,7 @@ namespace WebProxy.Entiy
 
         private string GetPlatformPath(string path) 
         {
-            if (string.Equals(platform, "Docker", StringComparison.OrdinalIgnoreCase))
+            if (IsDocker)
             {
                 string dockerConfigPath = Path.Combine("certs", path);
                 return dockerConfigPath;

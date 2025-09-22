@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System;
+using System.Text;
 
 namespace WebProxy.Extensions
 {
@@ -13,6 +14,7 @@ namespace WebProxy.Extensions
         {
             return builder.Append(log).Append(' ');
         }
-        
+
+        public static bool IsDocker => Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
     }
 }

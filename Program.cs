@@ -34,8 +34,7 @@ namespace WebProxy
                 .UseDiyServiceProvider()
                 .ConfigureHostConfiguration((config) =>
                 {
-                    var platform = Environment.GetEnvironmentVariable("Platform"); //为了兼容 docker 方式运行
-                    if (string.Equals(platform, "Docker", StringComparison.OrdinalIgnoreCase))
+                    if (Extensions.Exp.IsDocker)
                     {
                         string dockerConfigPath = Path.Combine("config", "appsettings.json");
                         config.AddJsonFile(dockerConfigPath, optional: true, reloadOnChange: true);

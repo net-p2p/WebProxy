@@ -14,10 +14,10 @@ QQ:1477863629
     <NeutralLanguage>zh-Hans</NeutralLanguage>
     <UserSecretsId>8263e7ab-48a8-4d0d-9c7f-471f237b9bf7</UserSecretsId>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
-    <Version>3.1.0</Version>
+    <Version>3.1.1</Version>
     <Authors>nixue</Authors>
-    <AssemblyVersion>2.9.5.1</AssemblyVersion>
-    <FileVersion>2.9.5.1</FileVersion>
+    <AssemblyVersion>2.9.6.1</AssemblyVersion>
+    <FileVersion>2.9.6.1</FileVersion>
     <SignAssembly>False</SignAssembly>
     <AssemblyOriginatorKeyFile></AssemblyOriginatorKeyFile>
     <DelaySign>True</DelaySign>

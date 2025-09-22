@@ -5,7 +5,12 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
 USER $APP_UID
 WORKDIR /app
 EXPOSE 7080
+ENV Platform=Docker
 ENV CONFIG_PATH=/config
+
+# 设置容器的本地化，确保 UTF-8 支持
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 #设置时间为中国上海
 ENV TZ=Asia/Shanghai

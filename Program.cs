@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Tool.Utils;
 using Tool.Web;
@@ -23,23 +24,23 @@ namespace WebProxy
         public static async Task Main(string[] args)
         {
             SslCertificates = new();
-            Initialization();
             await CreateHostBuilder(args).Build().RunAsync();
-        }
-
-        private static void Initialization()
-        {
-            if (WindowsServiceHelpers.IsWindowsService() || SystemdHelpers.IsSystemdService()) Environment.CurrentDirectory = AppContext.BaseDirectory; //确保程序访问在安装目录
-            var configPath = Environment.GetEnvironmentVariable("CONFIG_PATH"); //为了兼容 docker 方式运行
-            if (!string.IsNullOrWhiteSpace(configPath))
-            {
-                Environment.CurrentDirectory = AppContext.BaseDirectory; //确保程序访问在安装目录
-            }
         }
 
         private static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .UseDiyServiceProvider()
+                .ConfigureHostConfiguration((config) =>
+                {
+                    var platform = Environment.GetEnvironmentVariable("Platform"); //为了兼容 docker 方式运行
+                    if (string.Equals(platform, "Docker", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string dockerConfigPath = Path.Combine("config", "appsettings.json");
+                        config.AddJsonFile(dockerConfigPath, optional: true, reloadOnChange: true);
+                        config.AddEnvironmentVariables();
+                        config.AddCommandLine(args);
+                    }
+                })
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
                     webBuilder.UseKestrel(options =>
@@ -69,7 +70,7 @@ namespace WebProxy
                 {
                     logging.AddLogSave();
                 })
-                .UseWindowsService()
+                .UseWindowsService(conf => Environment.CurrentDirectory = AppContext.BaseDirectory) //确保程序访问在安装目录
                 .UseSystemd();
 
         private static string[] GetUrls(IConfiguration configuration)

@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 
@@ -9,10 +10,13 @@ namespace WebProxy.Entiy
 {
     public class ServerCertificates
     {
+        private readonly string platform;
+
         public IReadOnlyDictionary<string, Certificates> Certificates { get; private set; }
 
         public ServerCertificates()
         {
+            platform = Environment.GetEnvironmentVariable("Platform"); //为了兼容 docker 方式运行
             Certificates = new Dictionary<string, Certificates>(StringComparer.OrdinalIgnoreCase);
         }
 
@@ -52,12 +56,30 @@ namespace WebProxy.Entiy
             {
                 var domain = section.GetValue<string>("Domain");
                 if (string.IsNullOrWhiteSpace(domain)) throw new Exception("HttpSsl 集合下的 配置信息,Domain 存在空值！，请查看配置文件！");
-                Certificates certificate = new(domain, section.GetValue<string>("SslPath"), section.GetValue<string>("Password"));
-                logger.LogInformation("加载证书：{Domain}", domain);
-                pairs.TryAdd(domain, certificate);
+                string sslPath = GetPlatformPath(section.GetValue<string>("SslPath"));
+                if (File.Exists(sslPath))
+                {
+                    Certificates certificate = new(domain, GetPlatformPath(section.GetValue<string>("SslPath")), section.GetValue<string>("Password"));
+                    logger.LogInformation("加载证书：{Domain}", domain);
+                    pairs.TryAdd(domain, certificate);
+                }
+                else
+                {
+                    logger.LogError("加载证书：{Domain} 失败，路径不存在：{sslPath}", domain, sslPath);
+                }
             }
 
             Certificates = pairs.AsReadOnly();
+        }
+
+        private string GetPlatformPath(string path) 
+        {
+            if (string.Equals(platform, "Docker", StringComparison.OrdinalIgnoreCase))
+            {
+                string dockerConfigPath = Path.Combine("certs", path);
+                return dockerConfigPath;
+            }
+            return path;
         }
     }
 }

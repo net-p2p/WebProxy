@@ -3,7 +3,7 @@
 # 第一阶段：基础运行环境（用于调试和生产）
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
 
-# 设置默认的用户ID（如果没有从外部传入）
+# 设置默认的用户ID
 ARG APP_UID=1000
 USER $APP_UID
 
@@ -19,11 +19,10 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV TZ=Asia/Shanghai
 
-# 创建所需的目录结构（使用明确的用户ID）
-RUN adduser -u ${APP_UID} --disabled-password --gecos "" appuser || true && \
-    mkdir -p /app/bin /app/config /app/certs /app/logs /app/temp && \
-    chown -R ${APP_UID}:${APP_UID} /app && \
+# 创建所需的目录结构（简化权限设置）
+RUN mkdir -p /app/bin /app/config /app/certs /app/logs /app/temp && \
     chmod -R 755 /app
+
 
 # 第二阶段：构建应用程序
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
@@ -63,10 +62,8 @@ RUN mkdir -p /app/config \
     && mv /app/bin/appsettings*.json /app/config/ 2>/dev/null || true \
     && mv /app/bin/*.config /app/config/ 2>/dev/null || true
 
-# 设置目录权限（使用明确的用户ID）
-ARG APP_UID=1000
-RUN chown -R $APP_UID:$APP_UID /app \
-    && chmod -R 755 /app
+# 设置目录权限（简化版本）
+RUN chmod -R 755 /app
 
 # 设置入口点，指定从 bin 目录启动
 ENTRYPOINT ["dotnet", "/app/bin/WebProxy.dll"]

@@ -6,8 +6,6 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
 # 设置工作目录和暴露端口
 WORKDIR /app
 EXPOSE 7080
-ENV LANG=C.UTF-8
-ENV LC_ALL=C.UTF-8
 ENV TZ=Asia/Shanghai
 ENV DOTNET_RUNNING_IN_CONTAINER=true
 ENV ASPNETCORE_URLS="http://*:7080"

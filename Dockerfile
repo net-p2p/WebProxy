@@ -36,12 +36,12 @@ RUN dotnet restore "./WebProxy.csproj"
 COPY . .
 
 # 构建应用程序
-RUN dotnet build "./WebProxy.csproj" -c $BUILD_CONFIGURATION -o /app/build /p:DefineConstants="DOCKER" /p:Configuration=Docker
+RUN dotnet build "./WebProxy.csproj" -c $BUILD_CONFIGURATION -o /app/build /p:DefineConstants="DOCKER" /p:Configuration='Docker'
 
 # 第三阶段：发布应用程序
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./WebProxy.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:DefineConstants="DOCKER" /p:Configuration=Docker
+RUN dotnet publish "./WebProxy.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:DefineConstants="DOCKER" /p:Configuration='Docker'
 
 # 第四阶段：最终生产镜像
 FROM base AS final

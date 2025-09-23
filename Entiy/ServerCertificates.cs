@@ -60,10 +60,10 @@ namespace WebProxy.Entiy
 
                 if (section.IsSslPath("Pem", out string[] sslpaths) || section.IsSslPath("Pfx", out sslpaths))
                 {
-                    string sslPath = GetPlatformPath(sslpaths[1]), ssltype = sslpaths[0];
-                    if (File.Exists(sslPath))
+                    string sslPath1 = GetPlatformPath(sslpaths[1]), ssltype = sslpaths[0], sslPath2 = GetPlatformPemPath(ssltype, sslpaths[2]);
+                    if (File.Exists(sslPath1))
                     {
-                        Certificates certificate = new(domain, sslpaths[0], sslPath, sslpaths[2]);
+                        Certificates certificate = new(domain, ssltype, sslPath1, sslPath2);
                         if (certificate.IsError)
                         {
                             logger.LogError("加载证书[{ssltype}]：{Domain} 失败，错误：{Error}", ssltype, domain, certificate.Error);
@@ -72,14 +72,14 @@ namespace WebProxy.Entiy
                         {
                             logger.LogInformation("加载证书[{ssltype}]：{Domain}", ssltype, domain);
                         }
-                        if(!pairs.TryAdd(domain, certificate)) 
+                        if(!pairs.TryAdd(domain, certificate))
                         {
                             certificate.Dispose();
                         }
                     }
                     else
                     {
-                        logger.LogError("加载证书[{ssltype}]：{Domain} 失败，路径不存在：{sslPath}", ssltype, domain, sslPath);
+                        logger.LogError("加载证书[{ssltype}]：{Domain} 失败，路径不存在：{sslPath}", ssltype, domain, sslPath1);
                     }
                 }
                 else
@@ -95,8 +95,17 @@ namespace WebProxy.Entiy
         {
             if (IsDocker)
             {
-                string dockerConfigPath = Path.Combine("/app/certs", path);
+                string dockerConfigPath = Path.Combine(Environment.CurrentDirectory, "certs", path);
                 return dockerConfigPath;
+            }
+            return path;
+        }
+
+        private string GetPlatformPemPath(string ssltype, string path)
+        {
+            if (ssltype == "Pem")
+            {
+                return GetPlatformPath(path);
             }
             return path;
         }

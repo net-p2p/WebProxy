@@ -51,7 +51,7 @@ namespace WebProxy.Extensions
 
         public static string IsDockerAppsettings() 
         {
-            string dockerConfigPath = Path.Combine("/app/config", "appsettings.json");
+            string dockerConfigPath = Path.Combine(Environment.CurrentDirectory, "config", "appsettings.json");
 #if DOCKER
             if (!File.Exists(dockerConfigPath)) 
             {

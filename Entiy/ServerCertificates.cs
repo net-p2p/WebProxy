@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
+using WebProxy.Extensions;
 
 namespace WebProxy.Entiy
 {
@@ -55,17 +56,35 @@ namespace WebProxy.Entiy
             foreach (var section in sections)
             {
                 var domain = section.GetValue<string>("Domain");
-                if (string.IsNullOrWhiteSpace(domain)) throw new Exception("HttpSsl 集合下的 配置信息,Domain 存在空值！，请查看配置文件！");
-                string sslPath = GetPlatformPath(section.GetValue<string>("SslPath"));
-                if (File.Exists(sslPath))
+                if (string.IsNullOrWhiteSpace(domain)) throw new Exception("HttpSsl 集合下的配置信息，Domain 存在空值，请查看配置文件！");
+
+                if (section.IsSslPath("Pem", out string[] sslpaths) || section.IsSslPath("Pfx", out sslpaths))
                 {
-                    Certificates certificate = new(domain, GetPlatformPath(section.GetValue<string>("SslPath")), section.GetValue<string>("Password"));
-                    logger.LogInformation("加载证书：{Domain}", domain);
-                    pairs.TryAdd(domain, certificate);
+                    string sslPath = GetPlatformPath(sslpaths[1]), ssltype = sslpaths[0];
+                    if (File.Exists(sslPath))
+                    {
+                        Certificates certificate = new(domain, sslpaths[0], sslPath, sslpaths[2]);
+                        if (certificate.IsError)
+                        {
+                            logger.LogError("加载证书[{ssltype}]：{Domain} 失败，错误：{Error}", ssltype, domain, certificate.Error);
+                        }
+                        else
+                        {
+                            logger.LogInformation("加载证书[{ssltype}]：{Domain}", ssltype, domain);
+                        }
+                        if(!pairs.TryAdd(domain, certificate)) 
+                        {
+                            certificate.Dispose();
+                        }
+                    }
+                    else
+                    {
+                        logger.LogError("加载证书[{ssltype}]：{Domain} 失败，路径不存在：{sslPath}", ssltype, domain, sslPath);
+                    }
                 }
                 else
                 {
-                    logger.LogError("加载证书：{Domain} 失败，路径不存在：{sslPath}", domain, sslPath);
+                    logger.LogError("加载证书：{Domain} 失败，不存在：Pem or Pfx 证书路径配置！", domain);
                 }
             }
 

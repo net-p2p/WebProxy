@@ -18,16 +18,18 @@ namespace WebProxy.DiyTransform.Validate
 
         public ValidateW3CLogger(ILogger logger, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig): base("W3CLoggerTransform", logger, transformValues, routeConfig)
         {
-            if (Enabled
-                && ValidateLevel(out W3CLevel level)
-                && ValidateLogName(out string logName))
+            if (Enabled)
             {
-                Level = level;
-                LogName = logName;
-            }
-            else
-            {
-                IsError = true;
+                if (ValidateLevel(out W3CLevel level)
+                    && ValidateLogName(out string logName))
+                {
+                    Level = level;
+                    LogName = logName;
+                }
+                else
+                {
+                    IsError = true;
+                }
             }
         }
 

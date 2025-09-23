@@ -13,18 +13,20 @@ namespace WebProxy.DiyTransform.Validate
 
         public override bool IsError { get; init; }
 
-        public ValidateLocation(ILogger logger, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig): base("HttpsRedirectTransform", logger, transformValues, routeConfig)
+        public ValidateLocation(ILogger logger, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig): base("LocationTransform", logger, transformValues, routeConfig)
         {
-            if (Enabled
-                && ValidateHost(out string host)
-                && ValidateStatusCode(out int statusCode))
+            if (Enabled)
             {
-                Host = host;
-                StatusCode = statusCode;
-            }
-            else
-            {
-                IsError = true;
+                if (ValidateHost(out string host)
+                    && ValidateStatusCode(out int statusCode))
+                {
+                    Host = host;
+                    StatusCode = statusCode;
+                }
+                else
+                {
+                    IsError = true;
+                }
             }
         }
 

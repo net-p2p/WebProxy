@@ -2,29 +2,30 @@
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
-    <Description>简单配置的 Proxy 由逆血提供技术支持！
-QQ:1477863629
-免费使用</Description>
+    <Description>
+      简单配置的 Proxy 由逆血提供技术支持！
+      QQ:1477863629
+      免费使用</Description>
     <Copyright>nixue.top</Copyright>
-    <PackageReleaseNotes>支持代理 1.1 2.0 3.0
-
-目前已支持 Ssl 证书绑定。
-
-系统SDK修复重大bug，同时更新传输包大小限制协议</PackageReleaseNotes>
+    <PackageReleaseNotes>
+      支持代理 1.1 2.0 3.0
+      目前已支持 Ssl 证书绑定。
+      系统SDK修复重大bug，新增BodySize插件，允许对单个规则进行限制传输大小，默认增大到100MB
+    </PackageReleaseNotes>
     <NeutralLanguage>zh-Hans</NeutralLanguage>
     <UserSecretsId>8263e7ab-48a8-4d0d-9c7f-471f237b9bf7</UserSecretsId>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
-    <Version>3.1.4</Version>
+    <Version>3.2.0</Version>
     <Authors>nixue</Authors>
-    <AssemblyVersion>2.9.8.5</AssemblyVersion>
-    <FileVersion>2.9.8.5</FileVersion>
+    <AssemblyVersion>3.1.2.1</AssemblyVersion>
+    <FileVersion>3.1.2.1</FileVersion>
     <SignAssembly>False</SignAssembly>
     <AssemblyOriginatorKeyFile></AssemblyOriginatorKeyFile>
     <DelaySign>True</DelaySign>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>.</DockerfileContext>
     <Configurations>Debug;Release;Docker</Configurations>
-</PropertyGroup>
+  </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <Optimize>false</Optimize>
@@ -35,7 +36,6 @@ QQ:1477863629
   </ItemGroup>
 
   <ItemGroup>
-    <!--<PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />-->
     <PackageReference Include="Tool.Net" Version="5.5.2" />
     <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
   </ItemGroup>
@@ -45,11 +45,10 @@ QQ:1477863629
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.9" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Update="certs\5947891_985dw.cn.pfx">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Docker'">
+    <Optimize>true</Optimize>
+    <DefineConstants>$(DefineConstants);DOCKER</DefineConstants>
+  </PropertyGroup>
 
   <ItemGroup>
     <Folder Include="wwwroot\" />

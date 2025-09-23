@@ -15,16 +15,18 @@ namespace WebProxy.DiyTransform.Validate
 
         public ValidateHttpsRedirect(ILogger logger, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig): base("HttpsRedirectTransform", logger, transformValues, routeConfig)
         {
-            if (Enabled
-                && ValidateUrl(out string url)
-                && ValidateStatusCode(out int statusCode))
+            if (Enabled)
             {
-                Url = url;
-                StatusCode = statusCode;
-            }
-            else
-            {
-                IsError = true;
+                if (ValidateUrl(out string url)
+                    && ValidateStatusCode(out int statusCode))
+                {
+                    Url = url;
+                    StatusCode = statusCode;
+                }
+                else
+                {
+                    IsError = true;
+                }
             }
         }
 

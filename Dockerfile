@@ -3,12 +3,15 @@
 # 第一阶段：基础运行环境
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
 
+# 设置构建时参数和运行时环境变量
+ARG APP_PORT=7080
+
 # 设置工作目录和暴露端口
 WORKDIR /app
-EXPOSE 7080
+EXPOSE ${APP_PORT}
 ENV TZ=Asia/Shanghai
 ENV DOTNET_RUNNING_IN_CONTAINER=true
-ENV ASPNETCORE_URLS="http://*:7080"
+ENV ASPNETCORE_URLS=""
 ENV ASPNETCORE_HTTP_PORTS=""
 
 # 创建目录结构
@@ -24,7 +27,7 @@ RUN if [ -n "$APP_UID" ]; then \
 
 # 第二阶段：构建应用程序
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
-ARG BUILD_CONFIGURATION=Release
+ARG BUILD_CONFIGURATION=Docker
 WORKDIR /src
 
 # 复制项目文件并恢复依赖
@@ -35,12 +38,12 @@ RUN dotnet restore "./WebProxy.csproj"
 COPY . .
 
 # 构建应用程序
-RUN dotnet build "./WebProxy.csproj" -c $BUILD_CONFIGURATION -o /app/build /p:DefineConstants="DOCKER" /p:Configuration='Docker'
+RUN dotnet build "./WebProxy.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 # 第三阶段：发布应用程序
 FROM build AS publish
-ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./WebProxy.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:DefineConstants="DOCKER" /p:Configuration='Docker'
+ARG BUILD_CONFIGURATION=Docker
+RUN dotnet publish "./WebProxy.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 # 第四阶段：最终生产镜像
 FROM base AS final
@@ -53,7 +56,8 @@ COPY --from=publish /app/publish ./bin/
 RUN find /app/bin -name "*.pdb" -delete \
     && find /app/bin -name "*.xml" -delete \
     && find /app/bin -name "*.config" -delete \
-    && rm -rf /app/bin/runtimes || true
+    && rm -rf /app/bin/certs 2>/dev/null || true \
+    && rm -rf /app/bin/runtimes 2>/dev/null || true
 
 # 移动配置文件到config目录（使用条件判断）
 USER root

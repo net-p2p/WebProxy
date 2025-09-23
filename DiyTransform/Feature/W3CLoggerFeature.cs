@@ -28,6 +28,8 @@ namespace WebProxy.DiyTransform.Feature
 
         public Stopwatch Stopwatch { get; } = Stopwatch.StartNew();
 
+        public double TotalMilliseconds => Stopwatch.Elapsed.TotalMilliseconds;
+
         public string Scheme { get; set; }
 
         public string Host { get; set; }

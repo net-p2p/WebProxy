@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 #if !DOCKER
@@ -6,6 +7,7 @@ using Microsoft.Extensions.Hosting.Systemd;
 using Microsoft.Extensions.Hosting.WindowsServices;
 #endif
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,6 +17,7 @@ using System.Threading.Tasks;
 using Tool.Utils;
 using Tool.Web;
 using WebProxy.Entiy;
+using WebProxy.Extensions;
 
 namespace WebProxy
 {
@@ -34,19 +37,28 @@ namespace WebProxy
                 .UseDiyServiceProvider()
                 .ConfigureHostConfiguration((config) =>
                 {
-                    if (Extensions.Exp.IsDocker)
+                    if (Exp.IsDocker)
                     {
-                        string dockerConfigPath = Path.Combine("/app/config", "appsettings.json");
+                        string dockerConfigPath = Exp.IsDockerAppsettings();
                         config.AddJsonFile(dockerConfigPath, optional: true, reloadOnChange: true);
                         config.AddEnvironmentVariables();
                         config.AddCommandLine(args);
                     }
                 })
-                .ConfigureWebHostDefaults(webBuilder =>
+                .ConfigureWebHost(webBuilder =>
                 {
-                    webBuilder.UseKestrel(options =>
+                    webBuilder.UseKestrel((context, options) =>
                     {
-                        options.ConfigureHttpsDefaults(options =>
+                        options.LimitsOptions(options =>
+                        {
+                            options.MaxRequestBodySize = 100L * 1024 * 1024;    // 100MB
+                            options.MaxRequestBufferSize = null;                // 不限制缓冲
+                            options.MaxRequestHeaderCount = int.MaxValue;       // 最大请求头数量
+                            options.MaxRequestHeadersTotalSize = int.MaxValue;  // 最大请求头字节数
+                            options.MaxRequestLineSize = int.MaxValue;          // 最大请求地址长度
+                            options.MaxResponseBufferSize = null;               // 不限制响应缓冲
+                        })
+                        .ConfigureHttpsDefaults(options =>
                         {
                             options.ServerCertificateSelector = (a, b) =>
                             {
@@ -58,18 +70,15 @@ namespace WebProxy
                                 return null;
                             };
                         });
-                    });
 
-                    webBuilder.ConfigureServices((a, b) =>
+                        var serverUrls = GetUrls(context.Configuration);
+                        webBuilder.UseSetting(WebHostDefaults.ServerUrlsKey, string.Join(';', serverUrls));
+                    })
+                    .ConfigureLogging(logging =>
                     {
-                        var serverUrls = GetUrls(a.Configuration);
-                        webBuilder.UseUrls(serverUrls);
-                    });
-                    webBuilder.UseStartup<Startup>();
-                })
-                .ConfigureLogging(logging =>
-                {
-                    logging.AddLogSave();
+                        logging.AddLogSave();
+                    })
+                    .UseStartup<Startup>();
                 })
 #if !DOCKER
                 .UseWindowsService(conf => Environment.CurrentDirectory = AppContext.BaseDirectory) //确保程序访问在安装目录

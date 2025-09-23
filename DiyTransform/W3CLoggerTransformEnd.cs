@@ -44,7 +44,7 @@ namespace WebProxy.DiyTransform
                 {
                     StringBuilder builder = new();
                     builder.LogAppend(loggerFeature.Method).Append('[').Append(context.TraceIdentifier).LogAppend(']').LogAppend(context.Response.StatusCode)
-                        .Append(loggerFeature.Stopwatch.ElapsedMilliseconds).LogAppend("ms").LogAppend(loggerFeature.Scheme).LogAppend(loggerFeature.Host)
+                        .Append(loggerFeature.TotalMilliseconds.ToString("F4")).LogAppend("ms").LogAppend(loggerFeature.Scheme).LogAppend(loggerFeature.Host)
                         .Append(loggerFeature.Path).LogAppend(loggerFeature.Query).Append(loggerFeature.UserIp);
                     if (_level is W3CLevel.Debug)
                     {

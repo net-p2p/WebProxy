@@ -16,7 +16,6 @@ namespace WebProxy.DiyTransformFactory
         False
     }
 
-
     public abstract class DiyRequestTransform : RequestTransform
     {
         public abstract bool ResetConf(IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig);
@@ -25,6 +24,7 @@ namespace WebProxy.DiyTransformFactory
         {
             return typekey switch
             {
+                "BodySize" => BodySizeTransformStart.CreateTransform(_logger, _loggerFactory, transformValues, route, out transform),
                 "W3CLogger" => W3CLoggerTransformStart.CreateTransform(_logger, _loggerFactory, transformValues, route, out transform),
                 "HttpsRedirect" => HttpsRedirectTransformStart.CreateTransform(_logger, _loggerFactory, transformValues, route, out transform),
                 "Cors" => CorsTransformStart.CreateTransform(_logger, _loggerFactory, transformValues, route, out transform),

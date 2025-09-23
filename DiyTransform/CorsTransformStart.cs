@@ -76,57 +76,6 @@ namespace WebProxy.DiyTransform
 
         public override bool ResetConf(IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig)
         {
-            bool updated = false;
-
-            if (transformValues.TryGetValue("Enabled", out var enabledValue))
-            {
-                if (!ValidateEnabled(enabledValue, out bool newEnabled))
-                {
-                    _logger.LogError("Invalid Enabled value for CorsTransform: {EnabledValue}", enabledValue);
-                    return false;
-                }
-                _enabled = newEnabled;
-                updated = true;
-            }
-
-            if (transformValues.TryGetValue("AllowOrigin", out var allowOrigin))
-            {
-                _allowOrigins = allowOrigin?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
-                updated = true;
-            }
-
-            if (transformValues.TryGetValue("AllowMethods", out var allowMethods))
-            {
-                _allowMethods = allowMethods?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
-                updated = true;
-            }
-
-            if (transformValues.TryGetValue("AllowHeaders", out var allowHeaders))
-            {
-                _allowHeaders = allowHeaders?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
-                updated = true;
-            }
-
-            if (transformValues.TryGetValue("AllowCredentials", out var allowCredentials))
-            {
-                if (!bool.TryParse(allowCredentials, out bool newAllowCredentials))
-                {
-                    _logger.LogError("Invalid AllowCredentials value for CorsTransform: {AllowCredentials}", allowCredentials);
-                    return false;
-                }
-                _allowCredentials = newAllowCredentials;
-                updated = true;
-            }
-
-            if (updated)
-            {
-                if (_logger.IsEnabled(LogLevel.Debug))
-                {
-                    _logger.LogDebug("CorsTransform updated: Enabled={Enabled}, AllowOrigin={AllowOrigin}, AllowMethods={AllowMethods}, AllowHeaders={AllowHeaders}, AllowCredentials={AllowCredentials}",
-                        _enabled, string.Join(",", _allowOrigins), string.Join(",", _allowMethods), string.Join(",", _allowHeaders), _allowCredentials);
-                }
-            }
-
             ValidateCors validate = new(_logger, transformValues, routeConfig);
             if (validate.IsError)
             {
@@ -141,10 +90,9 @@ namespace WebProxy.DiyTransform
                 _allowHeaders = validate.AllowHeaders;
                 _allowCredentials = validate.AllowCredentials;
 
-                if (_logger.IsEnabled(LogLevel.Debug)) _logger.LogDebug("CorsTransform updated: Enabled={Enabled}, AllowOrigin={AllowOrigin}, AllowMethods={AllowMethods}, AllowHeaders={AllowHeaders}, AllowCredentials={AllowCredentials}", _enabled, string.Join(",", _allowOrigins), string.Join(",", _allowMethods), string.Join(",", _allowHeaders), _allowCredentials);
+                if (_logger.IsEnabled(LogLevel.Debug)) _logger.LogDebug("{TransformName} updated: Enabled={Enabled}, AllowOrigin={AllowOrigin}, AllowMethods={AllowMethods}, AllowHeaders={AllowHeaders}, AllowCredentials={AllowCredentials}", validate.TransformName, _enabled, string.Join(",", _allowOrigins), string.Join(",", _allowMethods), string.Join(",", _allowHeaders), _allowCredentials);
             }
-
-            return updated || transformValues.ContainsKey("DiyType");
+            return true;
         }
 
         public static TransformType CreateTransform(ILogger logger, ILoggerFactory factory, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig, out DiyRequestTransform transform)
@@ -158,14 +106,6 @@ namespace WebProxy.DiyTransform
 
             transform = new CorsTransformStart(factory.CreateLogger(validate.LoggerName), validate.Enabled, validate.AllowOrigins, validate.AllowMethods, validate.AllowHeaders, validate.AllowCredentials);
             return TransformType.True;
-        }
-
-        private static bool ValidateEnabled(string value, out bool result)
-        {
-            result = string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
-            return value == null ||
-                   string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

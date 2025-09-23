@@ -19,20 +19,22 @@ namespace WebProxy.DiyTransform.Validate
 
         public ValidateStaticFile(ILogger logger, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig): base("StaticFileTransform", logger, transformValues, routeConfig)
         {
-            if (Enabled
-                && ValidateRootPath(out string rootPath)
-                && ValidateDefaultFile(out string defaultFile)
-                && ValidateNotFoundPage(out string notFoundPage)
-                && ValidatePathPrefix(out string pathPrefix))
+            if (Enabled)
             {
-                RootPath = rootPath;
-                DefaultFile = defaultFile;
-                NotFoundPage = notFoundPage;
-                PathPrefix = pathPrefix;
-            }
-            else
-            {
-                IsError = true;
+                if (ValidateRootPath(out string rootPath)
+                    && ValidateDefaultFile(out string defaultFile)
+                    && ValidateNotFoundPage(out string notFoundPage)
+                    && ValidatePathPrefix(out string pathPrefix))
+                {
+                    RootPath = rootPath;
+                    DefaultFile = defaultFile;
+                    NotFoundPage = notFoundPage;
+                    PathPrefix = pathPrefix;
+                }
+                else
+                {
+                    IsError = true;
+                }
             }
         }
 

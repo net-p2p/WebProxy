@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography.Xml;
 using Yarp.ReverseProxy.Configuration;
 
 namespace WebProxy.DiyTransform.Validate
@@ -20,20 +19,22 @@ namespace WebProxy.DiyTransform.Validate
 
         public ValidateCors(ILogger logger, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig) : base("CorsTransform", logger, transformValues, routeConfig)
         {
-            if (Enabled
-               && ValidateAllowOrigins(out string[] allowOrigins)
-               && ValidateAllowMethods(out string[] allowMethods)
-               && ValidateAllowHeaders(out string[] allowHeaders)
-               && ValidateAllowCredentials(out bool allowCredentials))
+            if (Enabled)
             {
-                AllowOrigins = allowOrigins;
-                AllowMethods = allowMethods;
-                AllowHeaders = allowHeaders;
-                AllowCredentials = allowCredentials;
-            }
-            else
-            {
-                IsError = true;
+                if (ValidateAllowOrigins(out string[] allowOrigins)
+                    && ValidateAllowMethods(out string[] allowMethods)
+                    && ValidateAllowHeaders(out string[] allowHeaders)
+                    && ValidateAllowCredentials(out bool allowCredentials))
+                {
+                    AllowOrigins = allowOrigins;
+                    AllowMethods = allowMethods;
+                    AllowHeaders = allowHeaders;
+                    AllowCredentials = allowCredentials;
+                }
+                else
+                {
+                    IsError = true;
+                }
             }
         }
 

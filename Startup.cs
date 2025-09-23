@@ -1,22 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Builder;
+﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.EventLog;
-using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Primitives;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Tool.Utils;
 using Tool.Web;
-using WebProxy.DiyTransform;
 using WebProxy.DiyTransformFactory;
 using Yarp.ReverseProxy.Configuration;
 
@@ -129,42 +122,22 @@ namespace WebProxy
             Log.Error("捕获全局异常：", exception);//"Log/Risk/"
         }
 
-        private void SetFormOptions(IServiceCollection services)
+        private static void SetFormOptions(IServiceCollection services) //取消 ASP.NET Core 控制器的限制，正常情况以下配置是无效的
         {
-            var sections = Configuration.GetSection("FormOptions");
-            if (sections.GetChildren().Any())
+            services.SetFormOptions(config =>
             {
-                Console.WriteLine("FormOptions 配置载入...");
-
-                services.SetFormOptions((config) =>
-                {
-                    var _config = sections.Get<Microsoft.AspNetCore.Http.Features.FormOptions>();
-
-                    if (config.BufferBody != _config.BufferBody) config.BufferBody = _config.BufferBody;
-
-                    if (config.MemoryBufferThreshold != _config.MemoryBufferThreshold) config.MemoryBufferThreshold = _config.MemoryBufferThreshold;
-
-                    if (config.BufferBodyLengthLimit != _config.BufferBodyLengthLimit) config.BufferBodyLengthLimit = _config.BufferBodyLengthLimit;
-
-                    if (config.ValueCountLimit != _config.ValueCountLimit) config.ValueCountLimit = _config.ValueCountLimit;
-
-                    if (config.KeyLengthLimit != _config.KeyLengthLimit) config.KeyLengthLimit = _config.KeyLengthLimit;
-
-                    if (config.ValueLengthLimit != _config.ValueLengthLimit) config.ValueLengthLimit = _config.ValueLengthLimit;
-
-                    if (config.MultipartBoundaryLengthLimit != _config.MultipartBoundaryLengthLimit) config.MultipartBoundaryLengthLimit = _config.MultipartBoundaryLengthLimit;
-
-                    if (config.MultipartHeadersCountLimit != _config.MultipartHeadersCountLimit) config.MultipartHeadersCountLimit = _config.MultipartHeadersCountLimit;
-
-                    if (config.MultipartHeadersLengthLimit != _config.MultipartHeadersLengthLimit) config.MultipartHeadersLengthLimit = _config.MultipartHeadersLengthLimit;
-
-                    if (config.MultipartBodyLengthLimit != _config.MultipartBodyLengthLimit) config.MultipartBodyLengthLimit = _config.MultipartBodyLengthLimit;
-
-                    //config.ValueLengthLimit = sections.GetValue<int>("ValueLengthLimit");
-                    //config.MultipartBodyLengthLimit = sections.GetValue<long>("MultipartBodyLengthLimit");
-                    //config.MemoryBufferThreshold = sections.GetValue<int>("MemoryBufferThreshold");
-                });
-            }
+                // 取消所有限制，设置成最大值
+                config.BufferBody = true;
+                config.MemoryBufferThreshold = int.MaxValue;
+                config.BufferBodyLengthLimit = long.MaxValue;
+                config.ValueCountLimit = int.MaxValue;
+                config.KeyLengthLimit = int.MaxValue;
+                config.ValueLengthLimit = int.MaxValue;
+                config.MultipartBoundaryLengthLimit = int.MaxValue;
+                config.MultipartHeadersCountLimit = int.MaxValue;
+                config.MultipartHeadersLengthLimit = int.MaxValue;
+                config.MultipartBodyLengthLimit = long.MaxValue;
+            });
         }
     }
 }

@@ -1,9 +1,9 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using Microsoft.AspNetCore.Server.Kestrel.Https;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
-using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using WebProxy.Extensions;
 
@@ -12,47 +12,81 @@ namespace WebProxy.Entiy
     public class ServerCertificates
     {
         private readonly bool IsDocker;
+        private readonly ILogger logger;
+        private readonly IConfiguration configuration;
 
-        public IReadOnlyDictionary<string, Certificates> Certificates { get; private set; }
+        public ConcurrentDictionary<string, Certificates> Certificates { get; }
 
-        public ServerCertificates()
+        private ServerCertificates()
         {
-            IsDocker = Extensions.Exp.IsDocker; //为了兼容 docker 方式运行
-            Certificates = new Dictionary<string, Certificates>(StringComparer.OrdinalIgnoreCase);
+            IsDocker = Exp.IsDocker; //为了兼容 docker 方式运行
+            Certificates = new(StringComparer.OrdinalIgnoreCase);
         }
 
-        public ServerCertificates(IConfiguration configuration, ILogger logger)
+        public ServerCertificates(IConfiguration configuration, ILoggerFactory loggerFactory) : this()
         {
-            GetServerCertificate(configuration, logger);
+            logger = loggerFactory.CreateLogger("SSL");
+            this.configuration = configuration;
+            GetServerCertificate();
         }
 
-        public void Reset(IConfiguration configuration, ILogger logger)
+        public void Reset()
         {
-            GetServerCertificate(configuration, logger);
+            GetServerCertificate();
         }
 
-        public bool GetSsl(string domain, out X509Certificate2 certificate) 
+        public bool GetSsl(Microsoft.AspNetCore.Connections.ConnectionContext context, string domain, ref X509Certificate2 certificate)
         {
+            if (string.IsNullOrEmpty(domain)) domain = "Default";
             var _contains = Certificates.TryGetValue(domain, out var _certificate);
             if (_contains)
             {
+                if (_certificate.IsDelete)
+                {
+                    logger.LogError("连接[{EndPoint}]：{Domain} 握手失败，因证书已删除！", context.RemoteEndPoint, domain);
+                    return false;
+                }
+                if (_certificate.IsDispose)
+                {
+                    logger.LogError("连接[{EndPoint}]：{Domain} 握手失败，因证书已释放！", context.RemoteEndPoint, domain);
+                    return false;
+                }
                 certificate = _certificate.Certificate;
+                return true;
             }
-            else
-            {
-                certificate = null;
-            }
-            return _contains;
+            logger.LogError("连接[{EndPoint}]：{Domain} 握手失败，因无可用证书！", context.RemoteEndPoint, domain);
+            return false;
         }
 
-        private void GetServerCertificate(IConfiguration configuration, ILogger logger)
+        public X509Certificate2 OnServerCertificate(Microsoft.AspNetCore.Connections.ConnectionContext context, string hostName) 
+        {
+            X509Certificate2 certificate2 = null;
+            if (GetSsl(context, hostName, ref certificate2))
+            {
+                return certificate2;
+            }
+            return null;
+        }
+
+        public void HttpsDefaults(HttpsConnectionAdapterOptions options)
+        {
+            //options.SslProtocols = SslProtocols.Tls12;
+            options.ServerCertificateSelector = OnServerCertificate;
+            //options.OnAuthenticate = (context, ssl) =>
+            //{
+                
+            //};
+
+            //options.ClientCertificateValidation = (a, b, c) =>
+            //{
+            //    return true;
+            //};
+        }
+
+        private void GetServerCertificate()
         {
             var sections = configuration.GetSection("HttpSsl").GetChildren();
-
-            if (!sections.Any()) { Certificates = new Dictionary<string, Certificates>(StringComparer.OrdinalIgnoreCase); return; } // throw new Exception("无法获取 HttpSsl 集合下的 配置信息，请查看配置文件！");
-
-            Dictionary<string, Certificates> pairs = new(StringComparer.OrdinalIgnoreCase);
-
+            foreach (var certificate in Certificates) certificate.Value.Delete();
             foreach (var section in sections)
             {
                 var domain = section.GetValue<string>("Domain");
@@ -67,15 +101,17 @@ namespace WebProxy.Entiy
                         if (certificate.IsError)
                         {
                             logger.LogError("加载证书[{ssltype}]：{Domain} 失败，错误：{Error}", ssltype, domain, certificate.Error);
+                            continue;
                         }
                         else
                         {
                             logger.LogInformation("加载证书[{ssltype}]：{Domain}", ssltype, domain);
                         }
-                        if(!pairs.TryAdd(domain, certificate))
+                        Certificates.AddOrUpdate(domain, certificate, (key, oldcert) =>
                         {
-                            certificate.Dispose();
-                        }
+                            oldcert.Dispose();
+                            return certificate;
+                        });
                     }
                     else
                     {
@@ -87,11 +123,9 @@ namespace WebProxy.Entiy
                     logger.LogError("加载证书：{Domain} 失败，不存在：Pem or Pfx 证书路径配置！", domain);
                 }
             }
-
-            Certificates = pairs.AsReadOnly();
         }
 
-        private string GetPlatformPath(string path) 
+        private string GetPlatformPath(string path)
         {
             if (IsDocker)
             {

@@ -1,20 +1,11 @@
 ﻿using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
-#if !DOCKER
-using Microsoft.Extensions.Hosting.Systemd;
-using Microsoft.Extensions.Hosting.WindowsServices;
-#endif
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
-using Tool.Utils;
+using Tool;
 using Tool.Web;
 using WebProxy.Entiy;
 using WebProxy.Extensions;
@@ -24,11 +15,11 @@ namespace WebProxy
     public class Program
     {
         //sn -i "NixueProxy.pfx" VS_KEY_976755B58DBCE54E
-        public static ServerCertificates SslCertificates { get; private set; }
+
+        public const int _1MB = 1024 * 1024;
 
         public static async Task Main(string[] args)
         {
-            SslCertificates = new();
             await CreateHostBuilder(args).Build().RunAsync();
         }
 
@@ -51,28 +42,25 @@ namespace WebProxy
                     {
                         options.LimitsOptions(options =>
                         {
-                            options.MaxRequestBodySize = 100L * 1024 * 1024;    // 100MB
+                            options.MaxRequestBodySize = 100L * _1MB;           // 100MB
                             options.MaxRequestBufferSize = null;                // 不限制缓冲
-                            options.MaxRequestHeaderCount = int.MaxValue;       // 最大请求头数量
-                            options.MaxRequestHeadersTotalSize = int.MaxValue;  // 最大请求头字节数
-                            options.MaxRequestLineSize = int.MaxValue;          // 最大请求地址长度
+                            options.MaxRequestHeaderCount = 10000;              // 最大请求头数量
+                            options.MaxRequestHeadersTotalSize = 10 * _1MB;     // 最大请求头字节数
+                            options.MaxRequestLineSize = 10 * _1MB;             // 最大请求地址长度
                             options.MaxResponseBufferSize = null;               // 不限制响应缓冲
+
+                            //options.Http2.MaxStreamsPerConnection = 100;
                         })
                         .ConfigureHttpsDefaults(options =>
                         {
-                            options.ServerCertificateSelector = (a, b) =>
+                            var obj = ObjectExtension.Provider.GetService(typeof(ServerCertificates));
+                            if (obj is ServerCertificates serverCertificates)
                             {
-                                if (string.IsNullOrEmpty(b)) b = "Default";
-                                if (SslCertificates.GetSsl(b, out var certificate2))
-                                {
-                                    return certificate2;
-                                }
-                                return null;
-                            };
+                                serverCertificates.HttpsDefaults(options);
+                            }
                         });
 
-                        var serverUrls = GetUrls(context.Configuration);
-                        webBuilder.UseSetting(WebHostDefaults.ServerUrlsKey, string.Join(';', serverUrls));
+                        webBuilder.UseSetting(WebHostDefaults.ServerUrlsKey, GetUrlsString(context.Configuration));
                     })
                     .ConfigureLogging(logging =>
                     {
@@ -101,5 +89,6 @@ namespace WebProxy
             return [.. usls];
         }
 
+        private static string GetUrlsString(IConfiguration configuration) => string.Join(';', GetUrls(configuration));
     }
 }

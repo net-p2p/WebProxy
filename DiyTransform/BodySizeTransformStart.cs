@@ -1,9 +1,6 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Features;
+﻿using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
-using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using WebProxy.DiyTransform.Validate;
 using WebProxy.DiyTransformFactory;
@@ -33,10 +30,13 @@ namespace WebProxy.DiyTransform
             }
 
             var context = transformContext.HttpContext;
-            var feature = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
-            if (feature != null && !feature.IsReadOnly)
+            var bodySizeFeature = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
+
+            //var requestDataRateFeature = context.Features.Get<IHttpMinRequestBodyDataRateFeature>();
+            //var responseDataRateFeature = context.Features.Get<IHttpMinResponseDataRateFeature>();
+            if (bodySizeFeature != null && !bodySizeFeature.IsReadOnly)
             {
-                feature.MaxRequestBodySize = _maxRequestBodySize;
+                bodySizeFeature.MaxRequestBodySize = _maxRequestBodySize;
             }
             else
             {

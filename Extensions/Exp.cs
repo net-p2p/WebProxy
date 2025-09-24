@@ -32,17 +32,14 @@ namespace WebProxy.Extensions
         public static bool IsSslPath(this IConfigurationSection section, string key, out string[] sslpaths) 
         {
             var sslpath = section.GetSection(key).GetChildren();
-            int count = sslpath.Count();
-            if (count != 0)
+            var strings = sslpath.Select(s => s.Value).ToList();
+            if (strings.Count != 0)
             {
-                if (count > 2) throw new Exception($"{key} 参数过多，只支持两个值");
-                if (count < 2) throw new Exception($"{key} 参数过少，只支持两个值");
-                List<string> txts = [key];
-                foreach (var txt in sslpath) 
-                {
-                    txts.Add(txt.Value);
-                }
-                sslpaths = [.. txts];
+                if (strings.Count > 2) throw new Exception($"{key} 参数过多，只支持两个值");
+                if (key.Equals("Pfx") && strings.Count < 2) throw new Exception($"{key} 参数过少，只支持两个值");
+                strings.Insert(0, key);
+                if (strings.Count < 2) strings.Add(string.Empty);
+                sslpaths = [.. strings];
                 return true;
             }
             sslpaths = null;
@@ -73,8 +70,8 @@ namespace WebProxy.Extensions
                       "HttpSsl": [
                         //{
                         //  "Domain": "985dw.cn",
-                        //  "SslPath": "certs/5947891_985dw.cn.pfx",
-                        //  "Password": "123456"
+                        //  "Pfx": [ "certs\\cert.pfx", "certimate" ]
+                        //  "Pem": [ "certs\\certbundle.pem", "certs\\privkey.pem" ]
                         //}
                       ], //HTTPS相关配置
                       "FormOptions": {
@@ -99,6 +96,12 @@ namespace WebProxy.Extensions
                                 "Enabled": true,
                                 "Level": "Debug",
                                 "LogName": "Ok"
+                              },
+                              {
+                                "DiyType": "BodySize",
+                                //"MaxRequestBodySize": "5242880",
+                                //"MaxRequestBodySize": 19264658,
+                                "Enabled": true
                               },
                               {
                                 "DiyType": "HttpsRedirect",

@@ -23,7 +23,7 @@ namespace WebProxy.DiyTransform
         private bool _enabled;
         private W3CLevel _level;
 
-        private string logPrefix => $"Log/W3CLogger/{_logName}/";
+        //private string logPrefix => $"Log/W3CLogger/{_logName}/";
 
         public W3CLoggerTransformStart(ILogger logger, bool enabled, W3CLevel level, string logName)
         {

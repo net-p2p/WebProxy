@@ -101,6 +101,8 @@ namespace WebProxy.Extensions
                                 "DiyType": "BodySize",
                                 //"MaxRequestBodySize": "5242880",
                                 //"MaxRequestBodySize": 19264658,
+                                //"MinRequestDataRate": "240,5",
+                                //"MinResponseDataRate": "240,5",
                                 "Enabled": true
                               },
                               {

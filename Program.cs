@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -38,7 +39,11 @@ namespace WebProxy
                 })
                 .ConfigureWebHost(webBuilder =>
                 {
-                    webBuilder.UseKestrel((context, options) =>
+                    webBuilder.UseSockets(options => 
+                    {
+                        options.Backlog = 5120;                                 // 最大请求队列排队数
+                    })
+                    .UseKestrel((context, options) =>
                     {
                         options.LimitsOptions(options =>
                         {

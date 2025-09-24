@@ -39,8 +39,10 @@ namespace WebProxy.DiyTransform
             }
 
             var context = transformContext.HttpContext;
-            var bodySizeFeature = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
 
+            if (context.WebSockets.IsWebSocketRequest) return ValueTask.CompletedTask;
+
+            var bodySizeFeature = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
             if (bodySizeFeature is not null && !bodySizeFeature.IsReadOnly)
             {
                 bodySizeFeature.MaxRequestBodySize = _maxRequestBodySize;

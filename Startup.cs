@@ -6,14 +6,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
-using System.Diagnostics;
 using System.Threading;
-using System.Threading.Channels;
 using System.Threading.Tasks;
 using Tool.Utils;
 using Tool.Web;
 using WebProxy.DiyTransformFactory;
 using WebProxy.Entiy;
+using WebProxy.Extensions;
 using Yarp.ReverseProxy.Configuration;
 
 namespace WebProxy
@@ -22,39 +21,51 @@ namespace WebProxy
     {
         public ServerCertificates SslCertificates { get; }
 
-        private readonly Stopwatch stopwatch;
+        private readonly DynamicConfiguration _inner;
         private readonly ILogger logger;
 
-        public ProxyConfigFilter(ILoggerFactory loggerFactory, ServerCertificates certificates)
+        public ProxyConfigFilter(ILoggerFactory loggerFactory, ServerCertificates certificates, DynamicConfiguration configuration)
         {
-            stopwatch = Stopwatch.StartNew();
             SslCertificates = certificates;
             logger = loggerFactory.CreateLogger("Proxy");
+            _inner = configuration;
+            RegisterInnerChangeCallback();
         }
 
         public ValueTask<ClusterConfig> ConfigureClusterAsync(ClusterConfig cluster, CancellationToken cancel) => ValueTask.FromResult(cluster);
 
-        public async ValueTask<RouteConfig> ConfigureRouteAsync(RouteConfig route, ClusterConfig cluster, CancellationToken cancel)
+        public ValueTask<RouteConfig> ConfigureRouteAsync(RouteConfig route, ClusterConfig cluster, CancellationToken cancel)
         {
-            await RegisterSsl();
             if (cluster is null)
             {
                 throw new Exception($"{nameof(cluster)} 对象不能为空！");
             }
             logger.LogInformation("{RouteId}.{ClusterId} [{Hosts}] --> {Now}", route.RouteId, route.ClusterId, string.Join(',', route.Match.Hosts), DateTime.Now.ToString("yy/MM/dd HH:mm:ss:fff"));
-            return route;
+            return ValueTask.FromResult(route);
         }
 
-        private async Task RegisterSsl()
+        private void RegisterInnerChangeCallback()
         {
-            if (stopwatch.ElapsedMilliseconds > 500)
+            var token = _inner.GetReloadToken();
+            token.RegisterChangeCallback(_ =>
             {
-                await Task.Delay(100);
-                stopwatch.Restart();
-                logger.LogInformation("Ssl 证书载入...");
-                SslCertificates.Reset();//重新注册Ssl证书
-                logger.LogInformation("Ssl 证书载入完成。");
-            }
+                try
+                {
+                    RegisterSsl();
+                }
+                finally
+                {
+                    // 重新注册以继续监听后续变化
+                    RegisterInnerChangeCallback();
+                }
+            }, state: null);
+        }
+
+        private void RegisterSsl()
+        {
+            logger.LogInformation("Ssl 证书载入...");
+            SslCertificates.Reset();//重新注册Ssl证书
+            logger.LogInformation("Ssl 证书载入完成。");
         }
     }
 
@@ -78,11 +89,16 @@ namespace WebProxy
                 }
             });
 
+            services.AddSingleton<IServicesCore, ServicesCore>(); //可通过协议通讯
             services.AddSingleton<ServerCertificates>(); //证书服务
-            services.AddReverseProxy().LoadFromConfig(Configuration.GetSection("ReverseProxy"))
-                //.AddTransformFactory<W3CLoggerTransformFactory>()
+
+            var dynamicConfig = new DynamicConfiguration(Configuration, TimeSpan.FromSeconds(1));
+            services.AddSingleton(dynamicConfig); //动态配置服务，防抖 1 秒
+            services.AddReverseProxy().LoadFromConfig(dynamicConfig.GetSection("ReverseProxy"))
                 .AddTransformFactory<DiyTypeTransformFactory>()
                 .AddConfigFilter<ProxyConfigFilter>();
+
+            services.AddHostedService<FirstService>(); //启动时执行一些操作
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -101,9 +117,9 @@ namespace WebProxy
             app.UseRequestTimeouts();
             app.UseEndpoints(endpoints =>
             {
-                endpoints.MapReverseProxy(proxyPipeline => 
+                endpoints.MapReverseProxy(proxyPipeline =>
                 {
-                   //注册其他中间件
+                    //注册其他中间件
                 });
             });
         }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using WebProxy.Extensions;
 
@@ -63,6 +64,12 @@ namespace WebProxy.Entiy
             X509Certificate2 certificate2 = null;
             if (GetSsl(context, hostName, ref certificate2))
             {
+                logger.LogInformation("连接[{EndPoint}]：{Domain} 已连接！", context.RemoteEndPoint, hostName);
+
+                context.ConnectionClosed.Register(() =>
+                {
+                    logger.LogInformation("连接[{EndPoint}]：{Domain} 已断开！", context.RemoteEndPoint, hostName);
+                });
                 return certificate2;
             }
             return null;
@@ -72,10 +79,18 @@ namespace WebProxy.Entiy
         {
             //options.SslProtocols = SslProtocols.Tls12;
             options.ServerCertificateSelector = OnServerCertificate;
-            //options.OnAuthenticate = (context, ssl) =>
-            //{
-                
-            //};
+
+            options.OnAuthenticate = (context, ssl) =>
+            {
+                if (OperatingSystem.IsLinux())
+                {
+                    ssl.CipherSuitesPolicy = new CipherSuitesPolicy(
+                        [
+                           TlsCipherSuite.TLS_RSA_WITH_AES_256_GCM_SHA384,
+                           TlsCipherSuite.TLS_RSA_WITH_AES_128_GCM_SHA256
+                        ]);
+                }
+            };
 
             //options.ClientCertificateValidation = (a, b, c) =>
             //{

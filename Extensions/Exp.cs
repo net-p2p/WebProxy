@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,6 +12,36 @@ namespace WebProxy.Extensions
 {
     public static class Exp
     {
+        /// <summary>
+        /// 将字符串编码为最多 6 字节，格式化为 IP:端口 格式。
+        /// </summary>
+        /// <param name="input">输入字符串</param>
+        /// <param name="encoding">编码方式，默认 UTF-8</param>
+        /// <returns>格式为 x.x.x.x:port 的字符串</returns>
+        /// <exception cref="ArgumentException">编码后超过 6 字节时抛出</exception>
+        public static string EncodeAsIpPort(string input, Encoding encoding)
+        {
+            encoding ??= Encoding.UTF8;
+
+            byte[] bytes = encoding.GetBytes(input ?? "");
+
+            if (bytes.Length > 6)
+                throw new ArgumentException("输入字符串编码后长度不能超过 6 字节");
+
+            byte[] result = new byte[6];
+            Array.Copy(bytes, result, bytes.Length); // 不足的自动是 0
+
+            // 构造 IP:Port 格式
+            int port = (result[4] << 8) + result[5];
+            return $"{result[0]}.{result[1]}.{result[2]}.{result[3]}:{port}";
+        }
+
+        public static double ElapsedMilliseconds(this Stopwatch stopwatch) => ElapsedMicroseconds(stopwatch) / 1_000.0;
+
+        public static double ElapsedMicroseconds(this Stopwatch stopwatch) => ElapsedNanoseconds(stopwatch) / 1_000.0;// 计算微秒
+
+        public static long ElapsedNanoseconds(this Stopwatch stopwatch) => stopwatch.ElapsedTicks * 1_000_000_000L / Stopwatch.Frequency; // 计算纳秒
+
         public static StringBuilder LogLine(this StringBuilder builder)
         {
             return builder.AppendLine().Append(' ').Append(' ');
@@ -29,7 +60,7 @@ namespace WebProxy.Extensions
 
         public static bool IsDocker => Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
 
-        public static bool IsSslPath(this IConfigurationSection section, string key, out string[] sslpaths) 
+        public static bool IsSslPath(this IConfigurationSection section, string key, out string[] sslpaths)
         {
             var sslpath = section.GetSection(key).GetChildren();
             var strings = sslpath.Select(s => s.Value).ToList();
@@ -46,7 +77,7 @@ namespace WebProxy.Extensions
             return false;
         }
 
-        public static string IsDockerAppsettings() 
+        public static string IsDockerAppsettings()
         {
             string dockerConfigPath = Path.Combine(Environment.CurrentDirectory, "config", "appsettings.json");
 #if DOCKER
@@ -64,28 +95,23 @@ namespace WebProxy.Extensions
                         }
                       },
                       "AllowedHosts": "*",
-                      "Server.Urls": [
+                      //"ServerIp": null, //服务器IP，默认null为不启用，是ClientFrame启用模式
+                      "Server.Urls": [ //启动相关服务
                         "https://0.0.0.0:7080"
-                      ], //启动相关服务
-                      "HttpSsl": [
+                      ],
+                      "HttpSsl": [ //HTTPS相关配置
                         //{
                         //  "Domain": "985dw.cn",
                         //  "Pfx": [ "certs\\cert.pfx", "certimate" ]
                         //  "Pem": [ "certs\\certbundle.pem", "certs\\privkey.pem" ]
                         //}
-                      ], //HTTPS相关配置
-                      "FormOptions": {
-                        "BufferBody": false, //完整正文缓冲
-                        "MemoryBufferThreshold": 1048576, //缓冲区大小(1M)，超过则写入临时文件
-                        "ValueLengthLimit": 4194304, //表单值最大值，默认4M
-                        "BufferBodyLengthLimit": 1610612736, //缓冲区最大值，默认30M
-                        "MultipartBodyLengthLimit": 1610612736 //最大上传大小，默认128M
-                      }, //请求资源限制配置 (覆盖全部参数)
+                      ],
                       "ReverseProxy": { //代理溯源
                         "Routes": {
                           "route0": {
                             "ClusterId": "test_cluster",
                             "TimeoutPolicy": "5s",
+                            "MaxRequestBodySize": -1, //禁用传输限制，字节单位
                             "Match": {
                               "Path": "/a/{**catch-all}",
                               "Hosts": [ "ok.cn" ]
@@ -96,14 +122,6 @@ namespace WebProxy.Extensions
                                 "Enabled": true,
                                 "Level": "Debug",
                                 "LogName": "Ok"
-                              },
-                              {
-                                "DiyType": "BodySize",
-                                //"MaxRequestBodySize": "5242880",
-                                //"MaxRequestBodySize": 19264658,
-                                //"MinRequestDataRate": "240,5",
-                                //"MinResponseDataRate": "240,5",
-                                "Enabled": true
                               },
                               {
                                 "DiyType": "HttpsRedirect",
@@ -128,38 +146,6 @@ namespace WebProxy.Extensions
                           }
                         },
                         "Clusters": {
-                          //"baidu": {
-                          //  "LoadBalancingPolicy": "RoundRobin",
-                          //  "Destinations": {
-                          //    "baidu/destination1": {
-                          //      "Address": "https://www.baidu.com/"
-                          //    },
-                          //    "baidu/destination2": {
-                          //      "Address": "https://www.baidu.com/"
-                          //    }
-                          //  }
-                          //},
-                          //"Admin_cluster": {
-                          //  "Destinations": {
-                          //    "Admin_cluster/destination1": {
-                          //      "Address": "http://192.168.1.88:8080/"
-                          //    }
-                          //  }
-                          //},
-                          //"Risk_cluster": {
-                          //  "Destinations": {
-                          //    "Risk_cluster/destination1": {
-                          //      "Address": "http://192.168.1.88:8083/"
-                          //    }
-                          //  }
-                          //},
-                          //"Api_cluster": {
-                          //  "Destinations": {
-                          //    "Api_cluster/destination1": {
-                          //      "Address": "http://192.168.1.88:8081/"
-                          //    }
-                          //  }
-                          //},
                           "test_cluster": {
                             "Destinations": {
                               "destination1": {

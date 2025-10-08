@@ -1,7 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using Tool.Sockets.Kernels;
+using System.Linq;
 
 namespace WebProxy.Entiy
 {
@@ -72,30 +76,77 @@ namespace WebProxy.Entiy
 
         private X509Certificate2 LoadPemCertificate()
         {
-            ReadOnlySpan<byte> certContents = File.ReadAllBytes(SslPath);
+            string certContents = File.ReadAllText(SslPath);
+            string keyContents = File.ReadAllText(Password);
 
-            using var certificate2 = X509CertificateLoader.LoadCertificate(certContents);
-            if (certificate2.HasPrivateKey)
+            ReadOnlySpan<byte> pfxBytes = LoadPemConvert(certContents, keyContents);
+            return X509CertificateLoader.LoadPkcs12(pfxBytes, null);
+        }
+        
+        /// <summary>
+        /// 解析PEM格式的证书链，提取所有证书的PEM字符串位置
+        /// </summary>
+        private static List<Range> ParsePemCertificates(ReadOnlySpan<char> pemContent)
+        {
+            var ranges = new List<Range>();
+            ReadOnlySpan<char> content = pemContent;
+            int tempEnd = 0;
+
+            while (PemEncoding.TryFind(content, out var fields))
             {
-                return GetPfx(certificate2);
+                Range location = fields.Location, _temp = new(location.Start.Value + tempEnd, location.End.Value + tempEnd);
+                ranges.Add(_temp);
+                tempEnd = _temp.End.Value;
+                content = content[location.End..];
             }
-            else
+
+            return ranges;
+        }
+
+        private static X509Certificate2 GetCertPem(ReadOnlySpan<char> pemBlock) 
+        {
+            int maxBytes = Encoding.UTF8.GetMaxByteCount(pemBlock.Length);
+            using BytesCore bytes = new(maxBytes);
+            int actualBytes = Encoding.UTF8.GetBytes(pemBlock, bytes.Span);
+            var certificate2 = X509CertificateLoader.LoadCertificate(bytes.Span[..actualBytes]);
+            return certificate2;
+        }
+
+        private static X509Certificate2 GetCertPem(ReadOnlySpan<char> pemBlock, string privkey)
+        {
+            using var certificate2 = GetCertPem(pemBlock);
+            using var hellman = RSA.Create();
+            hellman.ImportFromPem(privkey);
+            var x509 = certificate2.CopyWithPrivateKey(hellman);
+            return x509;
+        }
+
+        private static byte[] LoadPemConvert(string cert, string privkey)
+        {
+            ReadOnlySpan<char> pemContent = cert.AsSpan();
+            // 解析PEM文件中的所有证书
+            var certificatePems = ParsePemCertificates(pemContent);
+
+            if (certificatePems.Count is 0) throw new ArgumentException("未找到有效的证书");
+
+            // 创建证书集合
+            var loadedCertificates = new X509Certificate2Collection();
+            try
             {
-                if (!string.IsNullOrWhiteSpace(Password))
+                foreach (var (index, pemRange) in certificatePems.Index())
                 {
-                    ReadOnlySpan<char> keyContents = File.ReadAllText(Password);
-                    using var hellman = RSA.Create();
-                    hellman.ImportFromPem(keyContents);
-                    using var x509 = certificate2.CopyWithPrivateKey(hellman);
-                    return GetPfx(x509);
+                    var pemBlock = pemContent[pemRange];
+                    loadedCertificates.Add(index is 0 ? GetCertPem(pemBlock, privkey) : GetCertPem(pemBlock));
                 }
 
+                return loadedCertificates.Export(X509ContentType.Pkcs12) ?? throw new Exception("关联证书链失败！");
             }
-            throw new NotSupportedException($"{SslPath} 证书缺少私钥无法用于SSL验证握手！");
-
-            static X509Certificate2 GetPfx(X509Certificate2 certificate2) 
+            finally
             {
-               return X509CertificateLoader.LoadPkcs12(certificate2.Export(X509ContentType.Pkcs12), null);
+                foreach (var certificate in loadedCertificates)
+                {
+                    certificate?.Dispose();
+                }
             }
         }
     }

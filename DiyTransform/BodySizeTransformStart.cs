@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Tool;
 using Tool.Utils;
 using WebProxy.DiyTransform.Validate;
 using WebProxy.DiyTransformFactory;
@@ -41,6 +42,7 @@ namespace WebProxy.DiyTransform
             var context = transformContext.HttpContext;
 
             if (context.WebSockets.IsWebSocketRequest) return ValueTask.CompletedTask;
+            if (context.Request.Method.EqualsNotCase("CONNECT")) return ValueTask.CompletedTask;
 
             var bodySizeFeature = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
             if (bodySizeFeature is not null && !bodySizeFeature.IsReadOnly)

@@ -13,6 +13,7 @@ ENV TZ=Asia/Shanghai
 ENV DOTNET_RUNNING_IN_CONTAINER=true
 ENV ASPNETCORE_URLS=""
 ENV ASPNETCORE_HTTP_PORTS=""
+ENV TLS_CIPHER_MODE=Secure
 
 # 创建目录结构
 RUN mkdir -p /app/bin /app/config /app/certs /app/Log /app/wwwroot

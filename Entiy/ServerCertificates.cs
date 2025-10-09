@@ -7,10 +7,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Security;
-using System.Runtime.InteropServices.JavaScript;
+using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using WebProxy.Extensions;
-using static System.Collections.Specialized.BitVector32;
 
 namespace WebProxy.Entiy
 {
@@ -61,14 +60,13 @@ namespace WebProxy.Entiy
                 certificate = _certificate;
                 return true;
             }
-            logger.LogError("连接[{EndPoint}]：{Domain} 握手失败，因无可用证书！", context.RemoteEndPoint, domain);
+            if (domain is not "Default") logger.LogError("连接[{EndPoint}]：{Domain} 握手失败，因无可用证书！", context.RemoteEndPoint, domain);
             certificate = null;
             return false;
         }
 
         public X509Certificate2 OnServerCertificate(Microsoft.AspNetCore.Connections.ConnectionContext context, string hostName)
         {
-            //X509Certificate2 certificate2 = null;
             if (GetSsl(context, hostName, out Certificates certificate))
             {
                 logger.LogDebug("连接[{EndPoint}]：{Domain} 已连接！", context.RemoteEndPoint, hostName);
@@ -85,18 +83,39 @@ namespace WebProxy.Entiy
 
         public void HttpsDefaults(HttpsConnectionAdapterOptions options)
         {
-            //options.SslProtocols = SslProtocols.Tls12;
+            logger.LogInformation("已为[{OSDescription}]平台 初始化 TLS", System.Runtime.InteropServices.RuntimeInformation.OSDescription);
+
             options.ServerCertificateSelector = OnServerCertificate;
 
             options.OnAuthenticate = (context, ssl) =>
             {
-                if (OperatingSystem.IsLinux())
+                if (!(OperatingSystem.IsWindows() || OperatingSystem.IsAndroid()))
                 {
-                    ssl.CipherSuitesPolicy = new CipherSuitesPolicy(
+                    ssl.EnabledSslProtocols = SslProtocols.Tls13 | SslProtocols.Tls12;
+                    var cipherMode = Environment.GetEnvironmentVariable("TLS_CIPHER_MODE") ?? "Secure";
+                    if (cipherMode.Equals("Secure", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ssl.CipherSuitesPolicy = new CipherSuitesPolicy(
                         [
-                           TlsCipherSuite.TLS_RSA_WITH_AES_256_GCM_SHA384,
-                           TlsCipherSuite.TLS_RSA_WITH_AES_128_GCM_SHA256
+                            // TLS 1.3 Suites (OpenSSL ignores but ok to list)
+                            TlsCipherSuite.TLS_AES_256_GCM_SHA384,
+                            TlsCipherSuite.TLS_AES_128_GCM_SHA256,
+                            TlsCipherSuite.TLS_CHACHA20_POLY1305_SHA256,
+
+                            //TlsCipherSuite.TLS_ECCPWD_WITH_AES_256_GCM_SHA384, //实验阶段
+
+                            // TLS 1.2 Suites
+                            TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                            TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                            TlsCipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
                         ]);
+
+                        logger.LogDebug("TLS_CIPHER_MODE=Secure - 使用主流套件策略与Nginx一致");
+                    }
+                    else if (cipherMode.Equals("Auto", StringComparison.OrdinalIgnoreCase))
+                    {
+                        logger.LogDebug("TLS_CIPHER_MODE=Auto - 使用系统默认套件策略");
+                    }
                 }
             };
 
@@ -157,14 +176,16 @@ namespace WebProxy.Entiy
             return true;
         }
 
-        private void DeleteCert(List<CertEntiy> certEntiys) 
+        private void DeleteCert(List<CertEntiy> certEntiys)
         {
-            foreach (var certificate in Certificates)
+            foreach (var pair in Certificates)
             {
-                if (!certEntiys.Any(entiy => entiy.Domain.Equals(certificate.Key)))
+                if (!certEntiys.Any(entiy => entiy.Domain.Equals(pair.Key)))
                 {
-                    certificate.Value.Delete();
-                    Certificates.TryRemove(certificate);
+                    var certificate = pair.Value;
+                    logger.LogInformation("移除证书[{ssltype}]：{Domain}", certificate.SslType, certificate.Domain);
+                    certificate.Delete();
+                    Certificates.TryRemove(pair);
                 }
             }
         }

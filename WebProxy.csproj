@@ -5,12 +5,13 @@
     <Description>
       简单配置的 Proxy 由逆血提供技术支持！
       QQ:1477863629
+      Mail: mail@nixue.top
       免费使用</Description>
     <Copyright>nixue.top</Copyright>
     <PackageReleaseNotes>
       支持代理 1.1 2.0 3.0
       目前已支持 Ssl 证书绑定。
-      系统SDK修复重大bug，新增BodySize插件，允许对单个规则进行限制传输大小，默认增大到100MB
+      系统SDK修复重大bug，修复Pem证书链未加载全，优化证书热重载更新，新增配置文件保存防抖，新增可配置的服务通讯接口，其他优化等。
     </PackageReleaseNotes>
     <NeutralLanguage>zh-Hans</NeutralLanguage>
     <UserSecretsId>8263e7ab-48a8-4d0d-9c7f-471f237b9bf7</UserSecretsId>

@@ -3,6 +3,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Primitives;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 
@@ -68,8 +69,18 @@ namespace WebProxy.Extensions
             using (_sync.EnterScope())
             {
                 var previous = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
-                previous.Cancel();
-                previous.Dispose();
+                try
+                {
+                    previous.Cancel();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(ex);
+                }
+                finally 
+                {
+                    previous.Dispose();
+                }
             }
         }
 

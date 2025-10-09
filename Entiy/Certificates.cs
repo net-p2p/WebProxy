@@ -1,20 +1,35 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Tool;
 using Tool.Sockets.Kernels;
-using System.Linq;
 
 namespace WebProxy.Entiy
 {
+    public record CertEntiy
+    {
+        public string Domain { get; init; }
+        public string SslType { get; init; }
+        public string Arg0 { get; init; }
+        public string Arg1 { get; init; }
+    }
+
     public class Certificates : IDisposable
     {
         private readonly string error;
+        private readonly string certHash;
+        //private readonly Lock _sync = new(); 
+        private readonly X509Certificate2 certificate;
 
-        private bool isDelete = false;
-        private bool isDispose = false;
+        private volatile bool isDelete = false;
+        private volatile bool isDispose = false;
+        private long _refCount = 0;
 
         public Certificates(string domain, string sslType, string sslPath, string password)
         {
@@ -22,44 +37,83 @@ namespace WebProxy.Entiy
             this.SslType = sslType;
             this.SslPath = sslPath;
             this.Password = password;
-            Certificate = LoadCertificate(out error); //new X509Certificate2(SslPath, Password);
+            certificate = LoadCertificate(out certHash, out error); //new X509Certificate2(SslPath, Password);
         }
 
-        public string Domain { get; init; }
+        public Certificates(CertEntiy certEntiy) : this(certEntiy.Domain, certEntiy.SslType, certEntiy.Arg0, certEntiy.Arg1)
+        {
+        }
 
-        public string SslType { get; init; }
+        public string Domain { get; }
 
-        public string SslPath { get; init; }
+        public string SslType { get; }
 
-        public string Password { get; init; }
+        public string SslPath { get; }
 
-        public X509Certificate2 Certificate { get; }
+        public string Password { get; }
+
+        public string CertHash => certHash;
 
         public bool IsError => !string.IsNullOrEmpty(error);
 
         public string Error => error;
 
-        public bool IsDelete => isDelete;
+        //public bool IsDelete => isDelete;
 
-        public bool IsDispose => isDispose;
+        //public bool IsDispose => isDispose;
 
         public void Delete()
         {
             isDelete = true;
+            //using (_sync.EnterScope())
+            {
+                if (Volatile.Read(ref _refCount) is 0L)
+                {
+                    Dispose();
+                }
+            }
+        }
+
+        public X509Certificate2 BorrowCert()
+        {
+            //using (_sync.EnterScope())
+            {
+                if (isDispose) return null;
+                _refCount.Increment();
+                if (isDispose)
+                {
+                    ReturnCert();
+                    return null;
+                }
+                return certificate;
+            }
+        }
+
+        public void ReturnCert()
+        {
+            //using (_sync.EnterScope())
+            {
+                var i = _refCount.Decrement();
+                if (i is 0L && isDelete)
+                {
+                    Dispose();
+                }
+            }
         }
 
         public void Dispose()
         {
             isDispose = true;
-            Certificate?.Dispose();
+            certificate?.Dispose();
             GC.SuppressFinalize(this);
         }
 
-        private X509Certificate2 LoadCertificate(out string Error)
+        private X509Certificate2 LoadCertificate(out string CertHash, out string Error)
         {
             try
             {
                 Error = null;
+                CertHash = GetFileHash(SslPath);
                 return SslType switch
                 {
                     "Pfx" => X509CertificateLoader.LoadPkcs12FromFile(SslPath, Password),
@@ -69,6 +123,7 @@ namespace WebProxy.Entiy
             }
             catch (Exception ex)
             {
+                CertHash = null;
                 Error = ex.Message;
                 return null;
             }
@@ -82,7 +137,7 @@ namespace WebProxy.Entiy
             ReadOnlySpan<byte> pfxBytes = LoadPemConvert(certContents, keyContents);
             return X509CertificateLoader.LoadPkcs12(pfxBytes, null);
         }
-        
+
         /// <summary>
         /// 解析PEM格式的证书链，提取所有证书的PEM字符串位置
         /// </summary>
@@ -103,7 +158,7 @@ namespace WebProxy.Entiy
             return ranges;
         }
 
-        private static X509Certificate2 GetCertPem(ReadOnlySpan<char> pemBlock) 
+        private static X509Certificate2 GetCertPem(ReadOnlySpan<char> pemBlock)
         {
             int maxBytes = Encoding.UTF8.GetMaxByteCount(pemBlock.Length);
             using BytesCore bytes = new(maxBytes);
@@ -148,6 +203,37 @@ namespace WebProxy.Entiy
                     certificate?.Dispose();
                 }
             }
+        }
+
+        private static string GetFileHash(string file)
+        {
+            if (File.Exists(file))
+            {
+                using FileStream fileStream = File.Open(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+                return GetFileHash(fileStream);
+            }
+            else
+            {
+                throw new Exception("证书文件不存在！");
+            }
+        }
+
+        private static string GetFileHash(FileStream stream)
+        {
+            using SHA256 mySHA256 = SHA256.Create();
+            stream.Position = 0;
+            byte[] hashValue = mySHA256.ComputeHash(stream);
+            return PrintByteArray(hashValue); //Convert.ToHexString
+        }
+
+        private static string PrintByteArray(byte[] array)
+        {
+            StringBuilder stringBuilder = new();
+            for (int i = 0; i < array.Length; i++)
+            {
+                stringBuilder.Append($"{array[i]:X2}");
+            }
+            return stringBuilder.ToString();
         }
     }
 }

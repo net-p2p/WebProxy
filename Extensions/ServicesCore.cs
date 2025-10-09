@@ -52,7 +52,7 @@ namespace WebProxy.Extensions
                 client.AddKeepAlive(30);
                 client.SetCompleted(Completed);
             }
-            else _logger.LogInformation("服务通讯模式未启用，ServerIp:{ServerIp}", ServerIp ?? "空");
+            else _logger.LogInformation("服务通讯模式未启用，ServerIp:{ServerIp}", "null");
         }
 
         void IServicesCore.Stopping()
@@ -106,7 +106,7 @@ namespace WebProxy.Extensions
                     if (_logger.IsEnabled(LogLevel.Information))
                         _logger.LogInformation("连接服务成功！[{ip}]\t{time:yyyy/MM/dd HH:mm:ss:fffffff}", ip, time);
                     var api = new ApiPacket(0, 0);
-                    const string name = "Proxy";
+                    const string name = "proxy";
                     api.Set("serverName", name);
                     api.Set("fakeIp", Exp.EncodeAsIpPort(name, null));
                     _ = client.SendAsync(api).AsTask().ContinueWith(async (task) =>

@@ -5,8 +5,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.ConstrainedExecution;
+using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 using static System.Collections.Specialized.BitVector32;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace WebProxy.Extensions
 {
@@ -77,6 +81,11 @@ namespace WebProxy.Extensions
             return false;
         }
 
+        public static bool TrySslPath(this IConfigurationSection section, out string[] sslpaths)
+        {
+            return section.IsSslPath("Pem", out sslpaths) || section.IsSslPath("Pfx", out sslpaths);
+        }
+
         public static string IsDockerAppsettings()
         {
             string dockerConfigPath = Path.Combine(Environment.CurrentDirectory, "config", "appsettings.json");
@@ -99,13 +108,11 @@ namespace WebProxy.Extensions
                       "Server.Urls": [ //启动相关服务
                         "https://0.0.0.0:7080"
                       ],
-                      "HttpSsl": [ //HTTPS相关配置
-                        //{
-                        //  "Domain": "985dw.cn",
-                        //  "Pfx": [ "certs\\cert.pfx", "certimate" ]
-                        //  "Pem": [ "certs\\certbundle.pem", "certs\\privkey.pem" ]
-                        //}
-                      ],
+                      "HttpSsl": { //HTTPS相关配置
+                      //"nixue.top": {
+                      //  "Pfx": [ "certs\\cert.pfx", "certimate" ]
+                      //}
+                      },
                       "ReverseProxy": { //代理溯源
                         "Routes": {
                           "route0": {

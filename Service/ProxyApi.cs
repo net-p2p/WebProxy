@@ -12,7 +12,12 @@ namespace WebProxy.Service
     public class ProxyApi() : DataBase
     {
         public string ConfigPath => Exp.IsDocker ? Exp.IsDockerAppsettings() : Path.Combine(Environment.CurrentDirectory, "appsettings.json");
-            
+
+        protected override bool Initialize(DataNet dataTcp)
+        {
+            return base.Initialize(dataTcp);
+        }
+
         [DataNet(0, IsRelay = true)]
         public async ValueTask<IGoOut> Ping()
         {
@@ -48,7 +53,8 @@ namespace WebProxy.Service
             {
                 await File.WriteAllTextAsync(filePath, newContent);
             }
-            return Ok();
+            var okRequest = new { message = "OK" };
+            return Json(okRequest);
         }
     }
 }

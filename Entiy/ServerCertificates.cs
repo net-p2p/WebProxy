@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Server.Kestrel.Https;
+﻿using Microsoft.AspNetCore.Connections;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System;
@@ -7,8 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Security;
-using System.Security.Authentication;
-using System.Security.Cryptography.X509Certificates;
+using System.Threading.Tasks;
 using WebProxy.Extensions;
 
 namespace WebProxy.Entiy
@@ -30,6 +30,7 @@ namespace WebProxy.Entiy
         public ServerCertificates(IConfiguration configuration, ILoggerFactory loggerFactory) : this()
         {
             logger = loggerFactory.CreateLogger("SSL");
+            logger.LogInformation("已为[{OSDescription}]平台 初始化 TLS", System.Runtime.InteropServices.RuntimeInformation.OSDescription);
             this.configuration = configuration;
             GetServerCertificate();
         }
@@ -39,24 +40,12 @@ namespace WebProxy.Entiy
             GetServerCertificate();
         }
 
-        public bool GetSsl(Microsoft.AspNetCore.Connections.ConnectionContext context, string domain, out Certificates certificate)
+        public bool GetSsl(ConnectionContext context, string domain, out Certificates certificate)
         {
             if (string.IsNullOrEmpty(domain)) domain = "Default";
             var _contains = Certificates.TryGetValue(domain, out var _certificate);
             if (_contains)
             {
-                //if (_certificate.IsDelete)
-                //{
-                //    logger.LogError("连接[{EndPoint}]：{Domain} 握手失败，因证书已删除！", context.RemoteEndPoint, domain);
-                //    certificate = null;
-                //    return false;
-                //}
-                //if (_certificate.IsDispose)
-                //{
-                //    logger.LogError("连接[{EndPoint}]：{Domain} 握手失败，因证书已释放！", context.RemoteEndPoint, domain);
-                //    certificate = null;
-                //    return false;
-                //}
                 certificate = _certificate;
                 return true;
             }
@@ -65,7 +54,7 @@ namespace WebProxy.Entiy
             return false;
         }
 
-        public X509Certificate2 OnServerCertificate(Microsoft.AspNetCore.Connections.ConnectionContext context, string hostName)
+        public SslStreamCertificateContext OnServerCertificate(ConnectionContext context, string hostName)
         {
             if (GetSsl(context, hostName, out Certificates certificate))
             {
@@ -76,26 +65,43 @@ namespace WebProxy.Entiy
                     logger.LogDebug("连接[{EndPoint}]：{Domain} 已断开！", context.RemoteEndPoint, hostName);
                     certificate.ReturnCert();
                 });
+
                 return certificate.BorrowCert();
             }
             return null;
         }
 
-        public void HttpsDefaults(HttpsConnectionAdapterOptions options)
+        public async ValueTask<SslServerAuthenticationOptions> HttpsConnectionAsync(TlsHandshakeCallbackContext context)
         {
-            logger.LogInformation("已为[{OSDescription}]平台 初始化 TLS", System.Runtime.InteropServices.RuntimeInformation.OSDescription);
+            Console.WriteLine($"=== 详细 TLS 握手调试 ===");
 
-            options.ServerCertificateSelector = OnServerCertificate;
-
-            options.OnAuthenticate = (context, ssl) =>
+            // 检查连接特性
+            var features = context.Connection.Features;
+            Console.WriteLine($"🔧 连接特性数量: {features.Count()}");
+            foreach (var feature in features)
             {
+                Console.WriteLine($"   - {feature.Key.Name}");
+            }
+
+            try
+            {
+                var sslStreamCertificate = OnServerCertificate(context.Connection, context.ClientHelloInfo.ServerName) ?? throw new InvalidOperationException("证书加载失败");
+
+                var authenticationOptions = new SslServerAuthenticationOptions
+                {
+                    //ServerCertificate = localhostCert,
+                    ServerCertificateContext = sslStreamCertificate,
+                    //EnabledSslProtocols = SslProtocols.Tls12,
+                    //ClientCertificateRequired = false, //true,
+                };
+
                 if (!(OperatingSystem.IsWindows() || OperatingSystem.IsAndroid()))
                 {
-                    ssl.EnabledSslProtocols = SslProtocols.Tls13 | SslProtocols.Tls12;
+                    //ssl.EnabledSslProtocols = SslProtocols.Tls13 | SslProtocols.Tls12;
                     var cipherMode = Environment.GetEnvironmentVariable("TLS_CIPHER_MODE") ?? "Secure";
                     if (cipherMode.Equals("Secure", StringComparison.OrdinalIgnoreCase))
                     {
-                        ssl.CipherSuitesPolicy = new CipherSuitesPolicy(
+                        authenticationOptions.CipherSuitesPolicy = new CipherSuitesPolicy(
                         [
                             // TLS 1.3 Suites (OpenSSL ignores but ok to list)
                             TlsCipherSuite.TLS_AES_256_GCM_SHA384,
@@ -117,13 +123,30 @@ namespace WebProxy.Entiy
                         logger.LogDebug("TLS_CIPHER_MODE=Auto - 使用系统默认套件策略");
                     }
                 }
-            };
 
-            //options.ClientCertificateValidation = (a, b, c) =>
-            //{
-            //    return true;
-            //};
+                await Task.CompletedTask;
+                return authenticationOptions;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"💥 详细调试异常: {ex}");
+                throw;
+            }
         }
+
+        //public void HttpsDefaults(HttpsConnectionAdapterOptions options)
+        //{
+        //    //options.ServerCertificateSelector = OnServerCertificate;
+        //    options.OnAuthenticate = (context, ssl) =>
+        //    {
+
+        //    };
+
+        //    //options.ClientCertificateValidation = (a, b, c) =>
+        //    //{
+        //    //    return true;
+        //    //};
+        //}
 
         private bool TryCertEntiys(out List<CertEntiy> certEntiys)
         {
@@ -192,6 +215,8 @@ namespace WebProxy.Entiy
 
         private void GetServerCertificate()
         {
+            //var localhostCert = CertificateLoader.LoadFromStoreCert("localhost", "My", StoreLocation.CurrentUser, allowInvalid: true); //默认本地证书
+            //var certificate2 = CertificateLoader.LoadFromStoreCert(sslStreamCertificate.TargetCertificate.Subject, sslStreamCertificate.TargetCertificate.Issuer, StoreLocation.LocalMachine, true);
             if (TryCertEntiys(out List<CertEntiy> certEntiys))
             {
                 DeleteCert(certEntiys);
@@ -208,6 +233,7 @@ namespace WebProxy.Entiy
                     key =>
                     {
                         logger.LogInformation("载入证书[{ssltype}]：{Domain}", certEntiy.SslType, certEntiy.Domain);
+                        certificate.GetSubjects(logger);
                         return certificate;
                     },
                     (key, oldcert) =>
@@ -222,6 +248,7 @@ namespace WebProxy.Entiy
                         {
                             logger.LogInformation("更新证书[{ssltype}]：{Domain}", certEntiy.SslType, certEntiy.Domain);
                             oldcert.Delete();
+                            certificate.GetSubjects(logger);
                             return certificate;
                         }
                     });
@@ -235,15 +262,6 @@ namespace WebProxy.Entiy
             {
                 string dockerConfigPath = Path.Combine(Environment.CurrentDirectory, "certs", path);
                 return dockerConfigPath;
-            }
-            return path;
-        }
-
-        private string GetPlatformPemPath(string ssltype, string path)
-        {
-            if (ssltype == "Pem")
-            {
-                return GetPlatformPath(path);
             }
             return path;
         }

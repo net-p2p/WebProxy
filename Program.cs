@@ -1,10 +1,15 @@
-﻿using Microsoft.AspNetCore.Hosting;
+﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Connections;
+using Microsoft.AspNetCore.Connections.Features;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Security;
 using System.Threading.Tasks;
 using Tool;
 using Tool.Web;
@@ -21,6 +26,14 @@ namespace WebProxy
 
         public static async Task Main(string[] args)
         {
+            //AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            //{
+            //    Console.WriteLine($"[Unhandled] {e.ExceptionObject}");
+            //};
+            //TaskScheduler.UnobservedTaskException += (s, e) =>
+            //{
+            //    Console.WriteLine($"[Unobserved] {e.Exception}");
+            //};
             await CreateHostBuilder(args).Build().RunAsync();
         }
 
@@ -56,14 +69,32 @@ namespace WebProxy
 
                             //options.Http2.MaxStreamsPerConnection = 100;
                         })
-                        .ConfigureHttpsDefaults(options =>
+                        .ConfigureEndpointDefaults(options =>
                         {
-                            var obj = ObjectExtension.Provider.GetService(typeof(ServerCertificates));
+                            var obj = options.ApplicationServices.GetService(typeof(ServerCertificates));
                             if (obj is ServerCertificates serverCertificates)
                             {
-                                serverCertificates.HttpsDefaults(options);
+                                var tlsHandshake = new TlsHandshakeCallbackOptions
+                                {
+                                    OnConnectionState = options,
+                                    OnConnection = serverCertificates.HttpsConnectionAsync,
+                                };
+
+                                options.UseHttps(tlsHandshake);
+                            }
+                            else
+                            {
+                                throw new Exception("无法完成动态证书绑定！");
                             }
                         });
+                        //options.ConfigureHttpsDefaults(options =>
+                        //{
+                        //    var obj = ObjectExtension.Provider.GetService(typeof(ServerCertificates));
+                        //    if (obj is ServerCertificates serverCertificates)
+                        //    {
+                        //        serverCertificates.HttpsDefaults(options);
+                        //    }
+                        //});
 
                         webBuilder.UseSetting(WebHostDefaults.ServerUrlsKey, GetUrlsString(context.Configuration));
                     })

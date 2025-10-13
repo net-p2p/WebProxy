@@ -16,10 +16,10 @@
     <NeutralLanguage>zh-Hans</NeutralLanguage>
     <UserSecretsId>8263e7ab-48a8-4d0d-9c7f-471f237b9bf7</UserSecretsId>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
-    <Version>3.4.1</Version>
+    <Version>3.4.5</Version>
     <Authors>nixue</Authors>
-    <AssemblyVersion>3.3.3.1</AssemblyVersion>
-    <FileVersion>3.3.3.1</FileVersion>
+    <AssemblyVersion>3.4.5.1</AssemblyVersion>
+    <FileVersion>3.4.5.1</FileVersion>
     <SignAssembly>False</SignAssembly>
     <AssemblyOriginatorKeyFile></AssemblyOriginatorKeyFile>
     <DelaySign>True</DelaySign>

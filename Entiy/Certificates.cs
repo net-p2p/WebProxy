@@ -27,6 +27,7 @@ namespace WebProxy.Entiy
 
         private readonly string error;
         private readonly string certHash;
+        private readonly X509KeyStorageFlags flags;
         //private readonly Lock _sync = new(); 
         private readonly SslStreamCertificateContext certificateContext;
         //private X509Certificate2 TargetCertificate => certificateContext.TargetCertificate;
@@ -37,6 +38,7 @@ namespace WebProxy.Entiy
 
         public Certificates(string domain, string sslType, string sslPath, string password)
         {
+            flags = OperatingSystem.IsWindows() ? X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet : X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet;
             this.Domain = domain;
             this.SslType = sslType;
             this.SslPath = sslPath;
@@ -166,7 +168,7 @@ namespace WebProxy.Entiy
 
         private SslStreamCertificateContext LoadPfxCertificate()
         {
-            var x509Certificate2 = X509CertificateLoader.LoadPkcs12FromFile(SslPath, Password, X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet);
+            var x509Certificate2 = X509CertificateLoader.LoadPkcs12FromFile(SslPath, Password, flags);
             var sslStreamCertificateContext = SslStreamCertificateContext.Create(x509Certificate2, null, true);
             return sslStreamCertificateContext;
         }
@@ -176,9 +178,9 @@ namespace WebProxy.Entiy
             string certContents = File.ReadAllText(SslPath, ASCII);
             string keyContents = File.ReadAllText(Password, ASCII);
 
-            return LoadPemConvert(certContents, keyContents);
+            return LoadPemConvert(certContents, keyContents, flags);
             //ReadOnlySpan<byte> pfxBytes = LoadPemConvert(certContents, keyContents);
-            //return X509CertificateLoader.LoadPkcs12(pfxBytes, null, X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet);
+            //return X509CertificateLoader.LoadPkcs12(pfxBytes, null, flags);
         }
 
         /// <summary>
@@ -219,7 +221,7 @@ namespace WebProxy.Entiy
             return x509;
         }
 
-        private static SslStreamCertificateContext LoadPemConvert(string cert, string privkey)
+        private static SslStreamCertificateContext LoadPemConvert(string cert, string privkey, X509KeyStorageFlags flags)
         {
             ReadOnlySpan<char> pemContent = cert.AsSpan();
             // 解析PEM文件中的所有证书
@@ -240,7 +242,7 @@ namespace WebProxy.Entiy
                 //var sslStreamCertificateContext = SslStreamCertificateContext.Create(loadedCertificates[0], loadedCertificates, true);
                 //return sslStreamCertificateContext;
                 var pfxBytes = loadedCertificates.Export(X509ContentType.Pkcs12) ?? throw new Exception("关联证书链失败！");
-                var certificate2 = X509CertificateLoader.LoadPkcs12(pfxBytes, null, X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet);
+                var certificate2 = X509CertificateLoader.LoadPkcs12(pfxBytes, null, flags);
                 var sslStreamCertificateContext = SslStreamCertificateContext.Create(certificate2, null, true);
                 return sslStreamCertificateContext;
             }

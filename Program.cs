@@ -71,6 +71,7 @@ namespace WebProxy
                         })
                         .ConfigureEndpointDefaults(options =>
                         {
+                            options.UseConnectionLogging($"TlsConnection:{options.EndPoint}");
                             var obj = options.ApplicationServices.GetService(typeof(ServerCertificates));
                             if (obj is ServerCertificates serverCertificates)
                             {

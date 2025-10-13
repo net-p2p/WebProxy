@@ -73,16 +73,6 @@ namespace WebProxy.Entiy
 
         public async ValueTask<SslServerAuthenticationOptions> HttpsConnectionAsync(TlsHandshakeCallbackContext context)
         {
-            Console.WriteLine($"=== 详细 TLS 握手调试 ===");
-
-            // 检查连接特性
-            var features = context.Connection.Features;
-            Console.WriteLine($"🔧 连接特性数量: {features.Count()}");
-            foreach (var feature in features)
-            {
-                Console.WriteLine($"   - {feature.Key.Name}");
-            }
-
             try
             {
                 var sslStreamCertificate = OnServerCertificate(context.Connection, context.ClientHelloInfo.ServerName) ?? throw new InvalidOperationException("证书加载失败");
@@ -129,8 +119,8 @@ namespace WebProxy.Entiy
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"💥 详细调试异常: {ex}");
-                throw;
+                logger.LogError("TlsHandshake：{ex}", ex);
+                return null;
             }
         }
 

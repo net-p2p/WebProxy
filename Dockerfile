@@ -74,5 +74,8 @@ RUN if [ -n "$APP_UID" ]; then \
         chmod -R 755 /app; \
     fi
 
+# 安装已知根证书包
+RUN apt-get update && apt-get install -y ca-certificates wget
+
 # 设置入口点
 ENTRYPOINT ["dotnet", "/app/bin/WebProxy.dll"]

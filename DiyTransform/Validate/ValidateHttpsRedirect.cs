@@ -42,7 +42,7 @@ namespace WebProxy.DiyTransform.Validate
                 }
             }
             url = string.Empty;
-            return true; ;
+            return true;
         }
 
         private bool ValidateStatusCode(out int statusCode)

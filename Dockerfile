@@ -13,7 +13,7 @@ ENV TZ=Asia/Shanghai
 ENV DOTNET_RUNNING_IN_CONTAINER=true
 ENV ASPNETCORE_URLS=""
 ENV ASPNETCORE_HTTP_PORTS=""
-ENV TLS_CIPHER_MODE=Secure
+#ENV TLS_CIPHER_MODE=Secure
 
 # 创建目录结构
 RUN mkdir -p /app/bin /app/config /app/certs /app/Log /app/wwwroot
@@ -74,8 +74,12 @@ RUN if [ -n "$APP_UID" ]; then \
         chmod -R 755 /app; \
     fi
 
-# 安装已知根证书包
-RUN apt-get update && apt-get install -y ca-certificates wget
+## 安装ca-certificates（Ubuntu/Debian）或使用Alpine的内置bundle
+#RUN apt-get update && apt-get install -y ca-certificates wget && \
+    ## 下载Mozilla bundle并替换/追加到系统CA
+    #wget -O /usr/local/share/ca-certificates/mozilla-bundle.crt https://curl.se/ca/cacert.pem && \
+    #update-ca-certificates && \
+    #rm -rf /var/lib/apt/lists/*
 
 # 设置入口点
 ENTRYPOINT ["dotnet", "/app/bin/WebProxy.dll"]

@@ -1,21 +1,127 @@
-﻿using Microsoft.AspNetCore.Server.Kestrel.Core;
+﻿using Microsoft.AspNetCore.Connections;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
-using System.Runtime.ConstrainedExecution;
-using System.Security.Cryptography;
+using System.Net;
+using System.Net.Security;
+using System.Net.Sockets;
+using System.Security.Authentication;
 using System.Text;
-using System.Threading.Tasks;
-using static System.Collections.Specialized.BitVector32;
-using static System.Net.Mime.MediaTypeNames;
+using Yarp.ReverseProxy.Configuration;
 
 namespace WebProxy.Extensions
 {
     public static class Exp
     {
+        #region 判断套接字绑定数据
+
+        private static int urlIndex;
+        private static List<string> urls = [];
+
+        private static string[] GetUrls(this IConfiguration configuration)
+        {
+            var sections = configuration.GetSection("Server.Urls").GetChildren();
+            if (!sections.Any()) throw new Exception("无法获取 Server.Urls 集合下的 配置信息，请查看配置文件！");
+            urls.Clear();
+            foreach (var section in sections)
+            {
+                if (string.IsNullOrEmpty(section.Value)) throw new Exception("Server.Urls 集合下的 配置信息存在问题，请查看配置文件！");
+                urls.Add(section.Value);
+            }
+
+            return [.. urls];
+        }
+
+        public static string GetUrlsString(this IConfiguration configuration) => string.Join(';', GetUrls(configuration));
+
+        public static bool IsEndpointHttps(EndPoint endpoint)
+        {
+            try
+            {
+                if (urls.Count > urlIndex)
+                {
+                    string url = urls[urlIndex];
+                    var endPoint = ParseAddress(url, out bool https);
+                    if (endPoint.Equals(endpoint))
+                    {
+                        return https;
+                    }
+                }
+            }
+            finally
+            {
+                urlIndex++;
+            }
+            return false;
+        }
+
+        private static EndPoint ParseAddress(string address, out bool https)
+        {
+            var parsedAddress = BindingAddress.Parse(address);
+            https = parsedAddress.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase);
+
+            if (parsedAddress.IsUnixPipe)
+            {
+                return new UnixDomainSocketEndPoint(parsedAddress.UnixPipePath);
+            }
+            else if (parsedAddress.IsNamedPipe)
+            {
+                return new NamedPipeEndPoint(parsedAddress.NamedPipeName);
+            }
+            else if (IsLocalhost(parsedAddress.Host, out var prefix))
+            {
+                return prefix is null ? new IPEndPoint(IPAddress.Loopback, parsedAddress.Port) : new IPEndPoint(IPAddress.IPv6Any, parsedAddress.Port);
+            }
+            else if (TryCreateIPEndPoint(parsedAddress, out var endpoint))
+            {
+                return endpoint;
+            }
+            else
+            {
+                return new IPEndPoint(IPAddress.IPv6Any, parsedAddress.Port);
+            }
+
+            static bool IsLocalhost(string host, out string prefix)
+            {
+                if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
+                {
+                    prefix = null;
+                    return true;
+                }
+
+                const string localhostTld = ".localhost";
+                if (host.Length > localhostTld.Length && host.EndsWith(localhostTld, StringComparison.OrdinalIgnoreCase))
+                {
+                    prefix = host[..^localhostTld.Length];
+                    return true;
+                }
+
+                prefix = null;
+                return false;
+            }
+
+            static bool TryCreateIPEndPoint(BindingAddress address, [NotNullWhen(true)] out IPEndPoint endpoint)
+            {
+                if (!IPAddress.TryParse(address.Host, out var ip))
+                {
+                    endpoint = null;
+                    return false;
+                }
+
+                endpoint = new IPEndPoint(ip, address.Port);
+                return true;
+            }
+        }
+
+        #endregion
+
         /// <summary>
         /// 将字符串编码为最多 6 字节，格式化为 IP:端口 格式。
         /// </summary>
@@ -86,13 +192,102 @@ namespace WebProxy.Extensions
             return section.IsSslPath("Pem", out sslpaths) || section.IsSslPath("Pfx", out sslpaths);
         }
 
+        public static List<TlsCipherSuite> GetTlsCiphers(this IConfigurationSection section)
+        {
+            const string key = "CipherSuites";
+            var sslpath = section.GetSection(key).GetChildren();
+            var strings = sslpath.Select(s => s.Value).ToList();
+            if (strings.Count != 0)
+            {
+                List<TlsCipherSuite> tlsCipherSuites = [];
+                foreach (var txt in strings)
+                {
+                    if (Enum.TryParse<TlsCipherSuite>(txt, out var result))
+                    {
+                        tlsCipherSuites.Add(result);
+                    }
+                    else
+                    {
+                        throw new Exception($"{key} 配置下：{txt} 不是有效的属性名！");
+                    }
+                }
+
+                return tlsCipherSuites;
+            }
+            return [];
+        }
+
+        public static SslProtocols GetSslProtocols(this IConfigurationSection section)
+        {
+            const string key = "SslProtocols";
+            var sslpath = section.GetSection(key).GetChildren();
+            var strings = sslpath.Select(s => s.Value).ToList();
+            if (strings.Count != 0)
+            {
+                SslProtocols sslProtocols = default;
+                foreach (var txt in strings)
+                {
+                    if (Enum.TryParse<SslProtocols>(txt, out var result))
+                    {
+                        sslProtocols ^= result;
+                    }
+                    else
+                    {
+                        throw new Exception($"{key} 配置下：{txt} 不是有效的属性名！");
+                    }
+                }
+
+                return sslProtocols;
+            }
+            return SslProtocols.None;
+        }
+
+        public static List<SslApplicationProtocol> GetApplicationProtocols(this IConfigurationSection section)
+        {
+            const string key = "ApplicationProtocols";
+            var sslpath = section.GetSection(key).GetChildren();
+            var strings = sslpath.Select(s => s.Value).ToList();
+            if (strings.Count != 0)
+            {
+                List<SslApplicationProtocol> sslApplicationProtocols = [];
+                foreach (var txt in strings)
+                {
+                    var sslApplicationProtocol = txt switch
+                    {
+                        "Http11" => SslApplicationProtocol.Http11,
+                        "Http2" => SslApplicationProtocol.Http2,
+                        "Http3" => SslApplicationProtocol.Http3,
+                        _ => new SslApplicationProtocol(txt),
+                    };
+                    sslApplicationProtocols.Add(sslApplicationProtocol);
+                }
+
+                return sslApplicationProtocols;
+            }
+            return [SslApplicationProtocol.Http11, SslApplicationProtocol.Http2, SslApplicationProtocol.Http3];
+        }
+
+        public static bool GetConfBool(this IConfigurationSection section, string key, bool defaultValue) => section.GetValue(key, defaultValue);
+
+        public static E GetConfEnum<E>(this IConfigurationSection section, string key, E defaultValue) where E : struct => section.GetValue(key, defaultValue);
+
+        public static string IsAppsettings()
+        {
+            string configPath = Path.Combine(Environment.CurrentDirectory, "appsettings.json");
+            return IsConfigExists(configPath);
+        }
+
         public static string IsDockerAppsettings()
         {
             string dockerConfigPath = Path.Combine(Environment.CurrentDirectory, "config", "appsettings.json");
-#if DOCKER
-            if (!File.Exists(dockerConfigPath)) 
+            return IsConfigExists(dockerConfigPath);
+        }
+
+        private static string IsConfigExists(string configPath)
+        {
+            if (!File.Exists(configPath))
             {
-                File.AppendAllText(dockerConfigPath,
+                File.AppendAllText(configPath,
                     """
                     {
                       "Logging": {
@@ -111,6 +306,13 @@ namespace WebProxy.Extensions
                       "HttpSsl": { //HTTPS相关配置
                       //"nixue.top": {
                       //  "Pfx": [ "certs\\cert.pfx", "certimate" ]
+                      //  //"CipherSuites": [ "TLS_AES_256_GCM_SHA384", "TLS_AES_128_GCM_SHA256", "TLS_CHACHA20_POLY1305_SHA256" ], //可以不设置，Win下无效
+                      //  //"SslProtocols": [ "Tls", "Tls11", "Tls12", "Tls13" ], //可以不设置
+                      //  //"ApplicationProtocols": [ "Http11", "Http2", "Http3" ], //可以不设置
+                      //  //"AllowRenegotiation": false, //可以不设置
+                      //  //"AllowTlsResume": true, //可以不设置
+                      //  //"ClientCertificateRequired": false, //可以不设置
+                      //  //"CertificateRevocationCheckMode": "NoCheck" //可以不设置
                       //}
                       },
                       "ReverseProxy": { //代理溯源
@@ -169,9 +371,46 @@ namespace WebProxy.Extensions
                     """
                     , Encoding.UTF8);
             }
-#endif
-            return dockerConfigPath;
+            return configPath;
         }
 
+        public static void IsCertsPath()
+        {
+            string certsPath = Path.Combine(Environment.CurrentDirectory, "certs");
+            if (!Directory.Exists(certsPath))
+            {
+                Directory.CreateDirectory(certsPath);
+            }
+        }
+
+        public static IReverseProxyBuilder LoadDiyFromConfig(this IReverseProxyBuilder builder, IConfiguration config)
+        {
+            var dynamicConfig = new DynamicConfiguration(config, TimeSpan.FromSeconds(1));
+            builder.Services.AddSingleton(dynamicConfig); //动态配置服务，防抖 1 秒
+            builder.LoadFromConfig(dynamicConfig.GetSection("ReverseProxy"));
+
+            foreach (var serviceDescriptor in builder.Services)
+            {
+                if (serviceDescriptor.ServiceType == typeof(IProxyConfigProvider))
+                {
+                    builder.Services.Remove(serviceDescriptor);
+                    var factory = serviceDescriptor.ImplementationFactory;
+                    builder.Services.AddSingleton((provider) => OnConfigProvider(provider, factory));
+                    break;
+                }
+            }
+
+            return builder;
+
+            static IProxyConfigProvider OnConfigProvider(IServiceProvider provider, Func<IServiceProvider, object> ImplementationFactory)
+            {
+                var obj = ImplementationFactory(provider);
+                if (obj is IProxyConfigProvider proxyConfig)
+                {
+                    return new DiyProxyConfigProvider(provider, proxyConfig);
+                }
+                throw new Exception("无法被实现，不可能！");
+            }
+        }
     }
 }

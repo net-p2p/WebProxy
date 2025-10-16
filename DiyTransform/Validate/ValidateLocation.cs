@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 using Yarp.ReverseProxy.Configuration;
 
@@ -7,9 +8,11 @@ namespace WebProxy.DiyTransform.Validate
 {
     public class ValidateLocation : ValidateCore
     {
-        public string Host { get; }
+        public string Path { get; }
 
         public int StatusCode { get; }
+
+        public string HttpType { get; }
 
         public override bool IsError { get; init; }
 
@@ -17,11 +20,13 @@ namespace WebProxy.DiyTransform.Validate
         {
             if (Enabled)
             {
-                if (ValidateHost(out string host)
-                    && ValidateStatusCode(out int statusCode))
+                if (ValidatePath(out string path)
+                    && ValidateStatusCode(out int statusCode)
+                    && ValidateHttpType(out string httpType))
                 {
-                    Host = host;
+                    Path = path;
                     StatusCode = statusCode;
+                    HttpType = httpType;
                 }
                 else
                 {
@@ -30,19 +35,19 @@ namespace WebProxy.DiyTransform.Validate
             }
         }
 
-        private bool ValidateHost(out string url)
+        private bool ValidatePath(out string path)
         {
-            const string Key = "Host";
-            if (transformValues.TryGetValue(Key, out var urlValue))
+            const string Key = "Path";
+            if (transformValues.TryGetValue(Key, out var pathValue))
             {
-                if (!string.IsNullOrWhiteSpace(urlValue))
+                if (!string.IsNullOrWhiteSpace(pathValue))
                 {
-                    url = urlValue;
+                    path = pathValue;
                     return true;
                 }
             }
-            url = string.Empty;
-            return true; ;
+            path = string.Empty;
+            return true;
         }
 
         private bool ValidateStatusCode(out int statusCode)
@@ -63,5 +68,27 @@ namespace WebProxy.DiyTransform.Validate
             return true;
         }
 
+        private bool ValidateHttpType(out string httpType)
+        {
+            const string Key = "HttpType";
+            if (transformValues.TryGetValue(Key, out var statusHttpType))
+            {
+                switch (statusHttpType)
+                {
+                    case "Request":
+                        httpType = "Request";
+                        return true;
+                    case "Response":
+                        httpType = "Response";
+                        return true;
+                    default:
+                        LogError(Key, "not is Request or Response.");
+                        httpType = string.Empty;
+                        return false;
+                }
+            }
+            httpType = "Request";
+            return true;
+        }
     }
 }

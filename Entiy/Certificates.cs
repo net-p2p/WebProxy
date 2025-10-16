@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Security;
+using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -19,6 +20,14 @@ namespace WebProxy.Entiy
         public string SslType { get; init; }
         public string Arg0 { get; init; }
         public string Arg1 { get; init; }
+        public List<SslApplicationProtocol> ApplicationProtocols { get; set; }
+        public SslProtocols EnabledSslProtocols { get; init; }
+        public List<TlsCipherSuite> TlsCiphers { get; init; }
+        public bool AllowRenegotiation { get; init; }
+        public bool AllowTlsResume { get; init; }
+        public bool ClientCertificateRequired { get; init; }
+        public X509RevocationMode CertificateRevocationCheckMode { get; init; }
+        public EncryptionPolicy EncryptionPolicy { get; init; }
     }
 
     public class Certificates : IDisposable
@@ -28,35 +37,30 @@ namespace WebProxy.Entiy
         private readonly string error;
         private readonly string certHash;
         private readonly X509KeyStorageFlags flags;
-        //private readonly Lock _sync = new(); 
+        //private readonly Lock _sync = new();
         private readonly SslStreamCertificateContext certificateContext;
-        //private X509Certificate2 TargetCertificate => certificateContext.TargetCertificate;
 
+        private CertEntiy certEntiy;
         private volatile bool isDelete = false;
         private volatile bool isDispose = false;
         private long _refCount = 0;
 
-        public Certificates(string domain, string sslType, string sslPath, string password)
+        public Certificates(CertEntiy certEntiy, ILogger logger)
         {
             flags = OperatingSystem.IsWindows() ? X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet : X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet;
-            this.Domain = domain;
-            this.SslType = sslType;
-            this.SslPath = sslPath;
-            this.Password = password;
-            certificateContext = LoadCertificate(out certHash, out error); //new X509Certificate2(SslPath, Password);
+            this.certEntiy = certEntiy;
+            certificateContext = LoadCertificate(logger, out certHash, out error);
         }
 
-        public Certificates(CertEntiy certEntiy) : this(certEntiy.Domain, certEntiy.SslType, certEntiy.Arg0, certEntiy.Arg1)
-        {
-        }
+        public string Domain => certEntiy.Domain;
 
-        public string Domain { get; }
+        public string SslType => certEntiy.SslType;
 
-        public string SslType { get; }
+        public string SslPath => certEntiy.Arg0;
 
-        public string SslPath { get; }
+        public string Password => certEntiy.Arg1;
 
-        public string Password { get; }
+        public CertEntiy CertEntiy => certEntiy;
 
         public string CertHash => certHash;
 
@@ -67,6 +71,15 @@ namespace WebProxy.Entiy
         //public bool IsDelete => isDelete;
 
         //public bool IsDispose => isDispose;
+
+        public void UpCertEntiy(CertEntiy certEntiy, ILogger logger) 
+        {
+            if (certEntiy is not null)
+            {
+                this.certEntiy = certEntiy;
+                IsTlsCiphers(logger);
+            }
+        }
 
         public void Delete()
         {
@@ -143,9 +156,21 @@ namespace WebProxy.Entiy
 
                 logger.LogDebug("{Msg}", builder.ToString());
             }
+            IsTlsCiphers(logger);
         }
 
-        private SslStreamCertificateContext LoadCertificate(out string CertHash, out string Error)
+        private void IsTlsCiphers(ILogger logger) 
+        {
+            if (OperatingSystem.IsWindows() || OperatingSystem.IsAndroid())
+            {
+                if (certEntiy.TlsCiphers.Count > 0)
+                {
+                    logger.LogWarning("Hosts[{Domain}] 当前系统环境，不支持设置 CipherSuites 属性。", certEntiy.Domain);
+                }
+            }
+        }
+
+        private SslStreamCertificateContext LoadCertificate(ILogger logger, out string CertHash, out string Error)
         {
             try
             {
@@ -153,8 +178,8 @@ namespace WebProxy.Entiy
                 CertHash = GetFileHash(SslPath);
                 return SslType switch
                 {
-                    "Pfx" => LoadPfxCertificate(),
-                    "Pem" => LoadPemCertificate(), //X509Certificate2.CreateFromPemFile(SslPath, Password),
+                    "Pfx" => LoadPfxCertificate(logger),
+                    "Pem" => LoadPemCertificate(logger), //X509Certificate2.CreateFromPemFile(SslPath, Password),
                     _ => throw new NotSupportedException($"不支持该格式:[{SslType}]的证书文件"),
                 };
             }
@@ -166,19 +191,31 @@ namespace WebProxy.Entiy
             }
         }
 
-        private SslStreamCertificateContext LoadPfxCertificate()
+        private SslStreamCertificateContext LoadPfxCertificate(ILogger logger)
         {
-            var x509Certificate2 = X509CertificateLoader.LoadPkcs12FromFile(SslPath, Password, flags);
-            var sslStreamCertificateContext = SslStreamCertificateContext.Create(x509Certificate2, null, true);
+            var x509Cates = X509CertificateLoader.LoadPkcs12CollectionFromFile(SslPath, Password, flags);
+            X509Certificate2 leafCert = null;
+            foreach (var x509 in x509Cates)
+            {
+                logger.LogDebug("解析Pfx:{Subject}", x509.Subject);
+                if (x509.HasPrivateKey)
+                {
+                    leafCert = x509;
+                }
+            }
+            x509Cates.Remove(leafCert);
+            var sslCertificateTrust = SslCertificateTrust.CreateForX509Collection(x509Cates);
+            var sslStreamCertificateContext = SslStreamCertificateContext.Create(leafCert, null, true, sslCertificateTrust);
+            UpSslTrust(sslStreamCertificateContext, x509Cates);
             return sslStreamCertificateContext;
         }
 
-        private SslStreamCertificateContext LoadPemCertificate()
+        private SslStreamCertificateContext LoadPemCertificate(ILogger logger)
         {
             string certContents = File.ReadAllText(SslPath, ASCII);
             string keyContents = File.ReadAllText(Password, ASCII);
 
-            return LoadPemConvert(certContents, keyContents, flags);
+            return LoadPemConvert(logger, certContents, keyContents, flags);
             //ReadOnlySpan<byte> pfxBytes = LoadPemConvert(certContents, keyContents);
             //return X509CertificateLoader.LoadPkcs12(pfxBytes, null, flags);
         }
@@ -221,7 +258,7 @@ namespace WebProxy.Entiy
             return x509;
         }
 
-        private static SslStreamCertificateContext LoadPemConvert(string cert, string privkey, X509KeyStorageFlags flags)
+        private static SslStreamCertificateContext LoadPemConvert(ILogger logger, string cert, string privkey, X509KeyStorageFlags flags)
         {
             ReadOnlySpan<char> pemContent = cert.AsSpan();
             // 解析PEM文件中的所有证书
@@ -236,14 +273,19 @@ namespace WebProxy.Entiy
                 foreach (var (index, pemRange) in certificatePems.Index())
                 {
                     var pemBlock = pemContent[pemRange];
-                    loadedCertificates.Add(index is 0 ? GetCertPem(pemBlock, privkey) : GetCertPem(pemBlock));
+                    var x509 = index is 0 ? GetCertPem(pemBlock, privkey) : GetCertPem(pemBlock);
+                    logger.LogDebug("解析Pem:{Subject}", x509.Subject);
+                    loadedCertificates.Add(x509);
                 }
-                //SslCertificateTrust.CreateForX509Store();
-                //var sslStreamCertificateContext = SslStreamCertificateContext.Create(loadedCertificates[0], loadedCertificates, true);
-                //return sslStreamCertificateContext;
+
                 var pfxBytes = loadedCertificates.Export(X509ContentType.Pkcs12) ?? throw new Exception("关联证书链失败！");
                 var certificate2 = X509CertificateLoader.LoadPkcs12(pfxBytes, null, flags);
-                var sslStreamCertificateContext = SslStreamCertificateContext.Create(certificate2, null, true);
+
+                var copyCates = new X509Certificate2Collection(loadedCertificates);
+                copyCates.RemoveAt(0);
+                var sslCertificateTrust = SslCertificateTrust.CreateForX509Collection(copyCates);
+                var sslStreamCertificateContext = SslStreamCertificateContext.Create(certificate2, null, true, sslCertificateTrust);
+                UpSslTrust(sslStreamCertificateContext, copyCates);
                 return sslStreamCertificateContext;
             }
             finally
@@ -254,6 +296,23 @@ namespace WebProxy.Entiy
                 }
             }
         }
+
+        private static void UpSslTrust(SslStreamCertificateContext sslStreamCertificateContext, X509Certificate2Collection x509Cates) 
+        {
+            foreach (var (index, _x509) in sslStreamCertificateContext.IntermediateCertificates.Index())
+            {
+                var x509 = x509Cates.FirstOrDefault(c => c.Equals(_x509));
+                if (x509 is not null)
+                {
+                    using (x509)
+                    {
+                        x509Cates.Remove(x509);
+                        x509Cates.Add(_x509);
+                    }
+                }
+            }
+        }
+
 
         private static string GetFileHash(string file)
         {

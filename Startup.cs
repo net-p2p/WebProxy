@@ -28,7 +28,7 @@ namespace WebProxy
         {
             SslCertificates = certificates;
             logger = loggerFactory.CreateLogger("Proxy");
-            _inner = configuration;
+           _inner = configuration;
             RegisterInnerChangeCallback();
         }
 
@@ -52,6 +52,10 @@ namespace WebProxy
                 try
                 {
                     RegisterSsl();
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "证书加载错误！");
                 }
                 finally
                 {
@@ -92,9 +96,7 @@ namespace WebProxy
             services.AddSingleton<IServicesCore, ServicesCore>(); //可通过协议通讯
             services.AddSingleton<ServerCertificates>(); //证书服务
 
-            var dynamicConfig = new DynamicConfiguration(Configuration, TimeSpan.FromSeconds(1));
-            services.AddSingleton(dynamicConfig); //动态配置服务，防抖 1 秒
-            services.AddReverseProxy().LoadFromConfig(dynamicConfig.GetSection("ReverseProxy"))
+            services.AddReverseProxy().LoadDiyFromConfig(Configuration)
                 .AddTransformFactory<DiyTypeTransformFactory>()
                 .AddConfigFilter<ProxyConfigFilter>();
 

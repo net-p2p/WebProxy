@@ -29,6 +29,7 @@ namespace WebProxy.DiyTransformFactory
                 "HttpsRedirect" => HttpsRedirectTransformStart.CreateTransform(_logger, _loggerFactory, transformValues, route, out transform),
                 "Cors" => CorsTransformStart.CreateTransform(_logger, _loggerFactory, transformValues, route, out transform),
                 "StaticFile" => StaticFileTransformStart.CreateTransform(_logger, _loggerFactory, transformValues, route, out transform),
+                "Location" => LocationTransformStart.CreateTransform(_logger, _loggerFactory, transformValues, route, out transform),
                 _ => DiyTransformSet.UnknownDiyType(typekey, _logger, out transform),
             };
         }

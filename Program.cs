@@ -1,17 +1,9 @@
-﻿using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Connections;
-using Microsoft.AspNetCore.Connections.Features;
-using Microsoft.AspNetCore.Hosting;
+﻿using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Security;
 using System.Threading.Tasks;
-using Tool;
 using Tool.Web;
 using WebProxy.Entiy;
 using WebProxy.Extensions;
@@ -42,17 +34,14 @@ namespace WebProxy
                 .UseDiyServiceProvider()
                 .ConfigureHostConfiguration((config) =>
                 {
-                    if (Exp.IsDocker)
-                    {
-                        string dockerConfigPath = Exp.IsDockerAppsettings();
-                        config.AddJsonFile(dockerConfigPath, optional: true, reloadOnChange: true);
-                        config.AddEnvironmentVariables();
-                        config.AddCommandLine(args);
-                    }
+                    string configPath = Exp.IsDocker ? Exp.IsDockerAppsettings() : Exp.IsAppsettings();
+                    config.AddJsonFile(configPath, optional: true, reloadOnChange: true);
+                    config.AddEnvironmentVariables();
+                    config.AddCommandLine(args);
                 })
                 .ConfigureWebHost(webBuilder =>
                 {
-                    webBuilder.UseSockets(options => 
+                    webBuilder.UseSockets(options =>
                     {
                         options.Backlog = 5120;                                 // 最大请求队列排队数
                     })
@@ -71,23 +60,32 @@ namespace WebProxy
                         })
                         .ConfigureEndpointDefaults(options =>
                         {
-                            options.UseConnectionLogging($"TlsConnection:{options.EndPoint}");
-                            var obj = options.ApplicationServices.GetService(typeof(ServerCertificates));
-                            if (obj is ServerCertificates serverCertificates)
+                            var isHttps = Exp.IsEndpointHttps(options.EndPoint);
+                            if (isHttps)
                             {
-                                var tlsHandshake = new TlsHandshakeCallbackOptions
+                                options.UseConnectionLogging($"TlsConnection.{options.EndPoint}");
+                                var obj = options.ApplicationServices.GetService(typeof(ServerCertificates));
+                                if (obj is ServerCertificates serverCertificates)
                                 {
-                                    OnConnectionState = options,
-                                    OnConnection = serverCertificates.HttpsConnectionAsync,
-                                };
+                                    var tlsHandshake = new TlsHandshakeCallbackOptions
+                                    {
+                                        OnConnectionState = options,
+                                        OnConnection = serverCertificates.HttpsConnectionAsync,
+                                    };
 
-                                options.UseHttps(tlsHandshake);
+                                    options.UseHttps(tlsHandshake);
+                                }
+                                else
+                                {
+                                    throw new Exception("无法完成动态证书绑定！");
+                                }
                             }
                             else
                             {
-                                throw new Exception("无法完成动态证书绑定！");
+                                options.UseConnectionLogging($"HttpConnection.{options.EndPoint}");
                             }
                         });
+
                         //options.ConfigureHttpsDefaults(options =>
                         //{
                         //    var obj = ObjectExtension.Provider.GetService(typeof(ServerCertificates));
@@ -97,7 +95,7 @@ namespace WebProxy
                         //    }
                         //});
 
-                        webBuilder.UseSetting(WebHostDefaults.ServerUrlsKey, GetUrlsString(context.Configuration));
+                        webBuilder.UseSetting(WebHostDefaults.ServerUrlsKey, context.Configuration.GetUrlsString());
                     })
                     .ConfigureLogging(logging =>
                     {
@@ -110,22 +108,5 @@ namespace WebProxy
                 .UseSystemd()
 #endif
             ;
-
-        private static string[] GetUrls(IConfiguration configuration)
-        {
-            var sections = configuration.GetSection("Server.Urls").GetChildren();
-
-            if (!sections.Any()) throw new Exception("无法获取 Server.Urls 集合下的 配置信息，请查看配置文件！");
-            List<string> usls = [];
-            foreach (var section in sections)
-            {
-                if (string.IsNullOrEmpty(section.Value)) throw new Exception("Server.Urls 集合下的 配置信息存在问题，请查看配置文件！");
-                usls.Add(section.Value);
-            }
-
-            return [.. usls];
-        }
-
-        private static string GetUrlsString(IConfiguration configuration) => string.Join(';', GetUrls(configuration));
     }
 }

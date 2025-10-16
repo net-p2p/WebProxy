@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using WebProxy.Extensions;
 
@@ -15,6 +16,7 @@ namespace WebProxy.Entiy
 {
     public class ServerCertificates
     {
+        private readonly SslServerAuthenticationOptions defaultSslServer;
         private readonly bool IsDocker;
         private readonly ILogger logger;
         private readonly IConfiguration configuration;
@@ -23,8 +25,10 @@ namespace WebProxy.Entiy
 
         private ServerCertificates()
         {
+            Exp.IsCertsPath();
             IsDocker = Exp.IsDocker; //为了兼容 docker 方式运行
             Certificates = new(StringComparer.OrdinalIgnoreCase);
+            defaultSslServer = new() { ServerCertificateSelectionCallback = ServerCertificateSelection };
         }
 
         public ServerCertificates(IConfiguration configuration, ILoggerFactory loggerFactory) : this()
@@ -50,11 +54,12 @@ namespace WebProxy.Entiy
                 return true;
             }
             if (domain is not "Default") logger.LogError("连接[{EndPoint}]：{Domain} 握手失败，因无可用证书！", context.RemoteEndPoint, domain);
+            else logger.LogDebug("连接[{Remote}]：{Local} 无域名适配！", context.RemoteEndPoint, context.LocalEndPoint);
             certificate = null;
             return false;
         }
 
-        public SslStreamCertificateContext OnServerCertificate(ConnectionContext context, string hostName)
+        public bool TryServerCertificate(ConnectionContext context, string hostName, out SslStreamCertificateContext sslStreamCertificateContext, out CertEntiy certEntiy)
         {
             if (GetSsl(context, hostName, out Certificates certificate))
             {
@@ -65,63 +70,107 @@ namespace WebProxy.Entiy
                     logger.LogDebug("连接[{EndPoint}]：{Domain} 已断开！", context.RemoteEndPoint, hostName);
                     certificate.ReturnCert();
                 });
-
-                return certificate.BorrowCert();
+                certEntiy = certificate.CertEntiy;
+                sslStreamCertificateContext = certificate.BorrowCert();
+                return true;
             }
-            return null;
+            certEntiy = null;
+            sslStreamCertificateContext = null;
+            return false;
         }
 
         public async ValueTask<SslServerAuthenticationOptions> HttpsConnectionAsync(TlsHandshakeCallbackContext context)
         {
             try
             {
-                var sslStreamCertificate = OnServerCertificate(context.Connection, context.ClientHelloInfo.ServerName) ?? throw new InvalidOperationException("证书加载失败");
-
-                var authenticationOptions = new SslServerAuthenticationOptions
+                if (TryServerCertificate(context.Connection, context.ClientHelloInfo.ServerName, out var sslStreamCertificateContext, out var certEntiy))
                 {
-                    //ServerCertificate = localhostCert,
-                    ServerCertificateContext = sslStreamCertificate,
-                    //EnabledSslProtocols = SslProtocols.Tls12,
-                    //ClientCertificateRequired = false, //true,
-                };
-
-                if (!(OperatingSystem.IsWindows() || OperatingSystem.IsAndroid()))
-                {
-                    //ssl.EnabledSslProtocols = SslProtocols.Tls13 | SslProtocols.Tls12;
-                    var cipherMode = Environment.GetEnvironmentVariable("TLS_CIPHER_MODE") ?? "Secure";
-                    if (cipherMode.Equals("Secure", StringComparison.OrdinalIgnoreCase))
+                    var authenticationOptions = new SslServerAuthenticationOptions
                     {
-                        authenticationOptions.CipherSuitesPolicy = new CipherSuitesPolicy(
-                        [
-                            // TLS 1.3 Suites (OpenSSL ignores but ok to list)
-                            TlsCipherSuite.TLS_AES_256_GCM_SHA384,
-                            TlsCipherSuite.TLS_AES_128_GCM_SHA256,
-                            TlsCipherSuite.TLS_CHACHA20_POLY1305_SHA256,
+                        ApplicationProtocols = certEntiy.ApplicationProtocols,
+                        ServerCertificateContext = sslStreamCertificateContext,
+                        EnabledSslProtocols = certEntiy.EnabledSslProtocols,
+                        AllowRenegotiation = certEntiy.AllowRenegotiation,
+                        AllowTlsResume = certEntiy.AllowTlsResume,
+                        ClientCertificateRequired = certEntiy.ClientCertificateRequired,
+                        CertificateRevocationCheckMode = certEntiy.CertificateRevocationCheckMode,
+                        EncryptionPolicy = certEntiy.EncryptionPolicy,
+                    };
 
-                            //TlsCipherSuite.TLS_ECCPWD_WITH_AES_256_GCM_SHA384, //实验阶段
-
-                            // TLS 1.2 Suites
-                            TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-                            TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-                            TlsCipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
-                        ]);
-
-                        logger.LogDebug("TLS_CIPHER_MODE=Secure - 使用主流套件策略与Nginx一致");
-                    }
-                    else if (cipherMode.Equals("Auto", StringComparison.OrdinalIgnoreCase))
-                    {
-                        logger.LogDebug("TLS_CIPHER_MODE=Auto - 使用系统默认套件策略");
-                    }
+                    await ServerTlsCiphers(authenticationOptions, certEntiy.TlsCiphers);
+                    return authenticationOptions;
                 }
 
-                await Task.CompletedTask;
-                return authenticationOptions;
+                return AbortSslServer(context);
             }
             catch (Exception ex)
             {
                 logger.LogError("TlsHandshake：{ex}", ex);
-                return null;
+                return AbortSslServer(context);
             }
+        }
+
+        private static ValueTask ServerTlsCiphers(SslServerAuthenticationOptions authenticationOptions, List<TlsCipherSuite> TlsCiphers)
+        {
+            if (!(OperatingSystem.IsWindows() || OperatingSystem.IsAndroid()))
+            {
+                if (TlsCiphers.Count is not 0)
+                {
+                    authenticationOptions.CipherSuitesPolicy = new CipherSuitesPolicy(TlsCiphers);
+                }
+                //else
+                //{
+                //    var cipherMode = Environment.GetEnvironmentVariable("TLS_CIPHER_MODE") ?? "Secure";
+                //    if (cipherMode.Equals("Secure", StringComparison.OrdinalIgnoreCase))
+                //    {
+                //        authenticationOptions.CipherSuitesPolicy = new CipherSuitesPolicy(
+                //        [
+                //            // TLS 1.3 Suites (OpenSSL ignores but ok to list)
+                //            TlsCipherSuite.TLS_AES_256_GCM_SHA384,
+                //            TlsCipherSuite.TLS_AES_128_GCM_SHA256,
+                //            TlsCipherSuite.TLS_CHACHA20_POLY1305_SHA256,
+
+                //            //TlsCipherSuite.TLS_ECCPWD_WITH_AES_256_GCM_SHA384, //实验阶段
+
+                //            // TLS 1.2 Suites
+                //            TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                //            TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                //            TlsCipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+
+                //            // TLS 1.2 补充套件
+                //            TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
+                //            TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384,
+                //            TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+                //            TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+
+                //            //// TLS 1.1 相关套件
+                //            //TlsCipherSuite.TLS_RSA_WITH_AES_128_CBC_SHA,
+                //            //TlsCipherSuite.TLS_RSA_WITH_AES_256_CBC_SHA,
+                //            //TlsCipherSuite.TLS_RSA_WITH_AES_128_CBC_SHA256,
+                //            //TlsCipherSuite.TLS_RSA_WITH_AES_256_CBC_SHA256,
+
+                //            //// TLS 1.0 相关套件（不推荐）
+                //            //TlsCipherSuite.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+                //            //TlsCipherSuite.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA
+                //        ]);
+
+                //        logger.LogDebug("TLS_CIPHER_MODE=Secure - 使用主流套件策略与Nginx一致");
+                //    }
+                //    else if (cipherMode.Equals("Auto", StringComparison.OrdinalIgnoreCase))
+                //    {
+                //        logger.LogDebug("TLS_CIPHER_MODE=Auto - 使用系统默认套件策略");
+                //    }
+                //}
+            }
+
+            return ValueTask.CompletedTask;
+        }
+
+        private SslServerAuthenticationOptions AbortSslServer(TlsHandshakeCallbackContext context)
+        {
+            context.Connection.Abort();
+            logger.LogDebug("连接[{Remote}]：{Local} 已断开！", context.Connection.RemoteEndPoint, context.Connection.LocalEndPoint);
+            return defaultSslServer;
         }
 
         //public void HttpsDefaults(HttpsConnectionAdapterOptions options)
@@ -168,7 +217,17 @@ namespace WebProxy.Entiy
                                 return false;
                             }
                         }
-                        _certEntiys.Add(new CertEntiy { Domain = domain, SslType = ssltype, Arg0 = arg0, Arg1 = arg1 });
+                        _certEntiys.Add(new CertEntiy { 
+                            Domain = domain, SslType = ssltype, Arg0 = arg0, Arg1 = arg1, 
+                            ApplicationProtocols = section.GetApplicationProtocols(), 
+                            EnabledSslProtocols = section.GetSslProtocols(), 
+                            TlsCiphers = section.GetTlsCiphers(), 
+                            AllowRenegotiation = section.GetConfBool("AllowRenegotiation", false),
+                            AllowTlsResume = section.GetConfBool("AllowTlsResume", true),
+                            ClientCertificateRequired = section.GetConfBool("ClientCertificateRequired", false),
+                            CertificateRevocationCheckMode = section.GetConfEnum("CertificateRevocationCheckMode", X509RevocationMode.NoCheck),
+                            EncryptionPolicy = section.GetConfEnum("EncryptionPolicy", EncryptionPolicy.RequireEncryption),
+                        });
                     }
                     else
                     {
@@ -213,7 +272,7 @@ namespace WebProxy.Entiy
 
                 foreach (var certEntiy in certEntiys)
                 {
-                    Certificates certificate = new(certEntiy);
+                    Certificates certificate = new(certEntiy, logger);
                     if (certificate.IsError)
                     {
                         logger.LogError("加载证书[{ssltype}]：{Domain} 失败，错误：{Error}", certEntiy.SslType, certEntiy.Domain, certificate.Error);
@@ -231,6 +290,7 @@ namespace WebProxy.Entiy
                         if (oldcert.CertHash.Equals(certificate.CertHash))
                         {
                             logger.LogInformation("无需更新[{ssltype}]：{Domain}", certEntiy.SslType, certEntiy.Domain);
+                            oldcert.UpCertEntiy(certEntiy, logger);
                             certificate.Dispose();
                             return oldcert;
                         }
@@ -250,10 +310,24 @@ namespace WebProxy.Entiy
         {
             if (IsDocker)
             {
-                string dockerConfigPath = Path.Combine(Environment.CurrentDirectory, "certs", path);
-                return dockerConfigPath;
+                string dockerPath = Path.Combine(Environment.CurrentDirectory, "certs", path);
+                return dockerPath;
             }
             return path;
+        }
+
+        private static X509Certificate2 ServerCertificateSelection(object sender, string hostName)
+        {
+            return null; //无匹配的 hostName 返回空，用于断开与客户端的连接。
+            //try
+            //{
+            //    var localhostCert = CertificateLoader.LoadFromStoreCert("localhost", "My", StoreLocation.CurrentUser, allowInvalid: true); //默认本地证书
+            //    return localhostCert;
+            //}
+            //catch (Exception)
+            //{
+            //    return null;
+            //}
         }
     }
 }

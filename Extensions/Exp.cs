@@ -273,6 +273,12 @@ namespace WebProxy.Extensions
 
         public static string IsAppsettings()
         {
+#if !DOCKER
+            if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService() || Microsoft.Extensions.Hosting.Systemd.SystemdHelpers.IsSystemdService())
+            {
+                Environment.CurrentDirectory = AppContext.BaseDirectory; //确保程序访问在安装目录
+            }
+#endif
             string configPath = Path.Combine(Environment.CurrentDirectory, "appsettings.json");
             return IsConfigExists(configPath);
         }

@@ -12,33 +12,24 @@ using WebProxy.DiyTransformFactory;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.Transforms;
 
-namespace WebProxy.DiyTransform
+namespace WebProxy.DiyTransform.Start
 {
     public class BodySizeTransformStart : DiyRequestTransform
     {
-        private readonly ILogger _logger;
-        private bool _enabled;
         private long? _maxRequestBodySize;
 
         private MinDataRate _minRequestDataRate;
         private MinDataRate _minResponseDataRate;
 
-        public BodySizeTransformStart(ILogger logger, bool enabled, long? maxRequestBodySize, MinDataRate minRequestDataRate, MinDataRate minResponseDataRate)
+        public BodySizeTransformStart(ILogger logger, bool enabled, long? maxRequestBodySize, MinDataRate minRequestDataRate, MinDataRate minResponseDataRate) : base(logger, enabled)
         {
-            _logger = logger;
-            _enabled = enabled;
             _maxRequestBodySize = maxRequestBodySize;
             _minRequestDataRate = minRequestDataRate;
             _minResponseDataRate = minResponseDataRate;
         }
 
-        public override ValueTask ApplyAsync(RequestTransformContext transformContext)
+        public override ValueTask DiyApplyAsync(RequestTransformContext transformContext)
         {
-            if (!_enabled)
-            {
-                return ValueTask.CompletedTask;
-            }
-
             var context = transformContext.HttpContext;
 
             if (context.WebSockets.IsWebSocketRequest) return ValueTask.CompletedTask;

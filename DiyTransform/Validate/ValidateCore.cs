@@ -1,9 +1,6 @@
-﻿using Microsoft.AspNetCore.DataProtection.KeyManagement;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
-using System.Reflection.Emit;
-using WebProxy.DiyTransform.Feature;
 using Yarp.ReverseProxy.Configuration;
 
 namespace WebProxy.DiyTransform.Validate

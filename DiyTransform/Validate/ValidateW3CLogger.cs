@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using WebProxy.DiyTransform.Feature;
+using WebProxy.DiyTransform.DiyFeature;
 using Yarp.ReverseProxy.Configuration;
 
 namespace WebProxy.DiyTransform.Validate

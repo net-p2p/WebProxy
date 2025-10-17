@@ -8,50 +8,38 @@ using WebProxy.DiyTransformFactory;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.Transforms;
 
-namespace WebProxy.DiyTransform
+namespace WebProxy.DiyTransform.End
 {
-    public class LocationTransformStart : DiyRequestTransform
+    public class LocationTransformEnd : DiyResponseTransform
     {
-        private readonly ILogger _logger;
         private int _statusCode;
-        private bool _enabled;
         private string _path;
         private string _httpType;
 
-        public LocationTransformStart(ILogger logger, int statusCode, bool enabled, string path, string httpType)
+        public LocationTransformEnd(ILogger logger, int statusCode, bool enabled, string path, string httpType) : base(logger, enabled)
         {
-            _logger = logger;
             _statusCode = statusCode;
-            _enabled = enabled;
             _path = path;
             _httpType = httpType;
         }
 
-        public override ValueTask ApplyAsync(RequestTransformContext transformContext)
+        public override ValueTask DiyApplyAsync(ResponseTransformContext transformContext)
         {
-            if (!_enabled)
-            {
-                return ValueTask.CompletedTask;
-            }
-
-            if (_httpType.Equals("Request"))
+            if (_httpType.Equals("Response"))
             {
                 var context = transformContext.HttpContext;
-                if (_path.EndsWith("/{**catch-all}"))
+                if (context.Response.Headers.TryGetValue(HeaderNames.Location, out var location))
                 {
-                    var basePath = _path[..^"/{**catch-all}".Length];
-                    context.Response.Headers.Location = $"{basePath}{transformContext.Path}{transformContext.Query.QueryString}";
+                    if (Uri.TryCreate(location, UriKind.Absolute, out var uri))
+                    {
+                        string scheme = context.Request.Scheme,
+                               host = string.IsNullOrEmpty(_path) ? context.Request.Host.Value : _path;
+                        var newUri = $"{scheme}://{host}{uri.PathAndQuery}{uri.Fragment}";
+
+                        context.Response.Headers.Location = newUri;
+                        if (_statusCode > 0) context.Response.StatusCode = _statusCode;
+                    }
                 }
-                else if (_path.EndsWith("/{**remainder}"))
-                {
-                    var basePath = _path[..^"/{**remainder}".Length];
-                    context.Response.Headers.Location = $"{basePath}{transformContext.Path}{transformContext.Query.QueryString}";
-                }
-                else
-                {
-                    context.Response.Headers.Location = _path;
-                }
-                context.Response.StatusCode = _statusCode;
             }
 
             return ValueTask.CompletedTask;
@@ -77,7 +65,7 @@ namespace WebProxy.DiyTransform
             return true;
         }
 
-        public static TransformType CreateTransform(ILogger logger, ILoggerFactory factory, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig, out DiyRequestTransform transform)
+        public static TransformType CreateTransform(ILogger logger, ILoggerFactory factory, IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig, out DiyResponseTransform transform)
         {
             ValidateLocation validate = new(logger, transformValues, routeConfig);
             if (validate.IsError)
@@ -85,7 +73,7 @@ namespace WebProxy.DiyTransform
                 transform = null;
                 return TransformType.False;
             }
-            transform = new LocationTransformStart(factory.CreateLogger(validate.LoggerName), validate.StatusCode, validate.Enabled, validate.Path, validate.HttpType);
+            transform = new LocationTransformEnd(factory.CreateLogger(validate.LoggerName), validate.StatusCode, validate.Enabled, validate.Path, validate.HttpType);
             return TransformType.True;
         }
     }

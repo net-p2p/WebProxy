@@ -9,34 +9,25 @@ using WebProxy.DiyTransformFactory;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.Transforms;
 
-namespace WebProxy.DiyTransform
+namespace WebProxy.DiyTransform.Start
 {
     public class CorsTransformStart : DiyRequestTransform
     {
-        private readonly ILogger _logger;
-        private bool _enabled;
         private string[] _allowOrigins;
         private string[] _allowMethods;
         private string[] _allowHeaders;
         private bool _allowCredentials;
 
-        public CorsTransformStart(ILogger logger, bool enabled, string[] allowOrigins, string[] allowMethods, string[] allowHeaders, bool allowCredentials)
+        public CorsTransformStart(ILogger logger, bool enabled, string[] allowOrigins, string[] allowMethods, string[] allowHeaders, bool allowCredentials) : base(logger, enabled)
         {
-            _logger = logger;
-            _enabled = enabled;
             _allowOrigins = allowOrigins ?? [];
             _allowMethods = allowMethods ?? ["GET", "POST"];
             _allowHeaders = allowHeaders ?? ["*"];
             _allowCredentials = allowCredentials;
         }
 
-        public override ValueTask ApplyAsync(RequestTransformContext transformContext)
+        public override ValueTask DiyApplyAsync(RequestTransformContext transformContext)
         {
-            if (!_enabled)
-            {
-                return ValueTask.CompletedTask;
-            }
-
             var context = transformContext.HttpContext;
             var origin = context.Request.Headers.Origin.FirstOrDefault();
 

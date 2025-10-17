@@ -10,7 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using WebProxy.Extensions;
 
-namespace WebProxy.DiyTransform.Feature
+namespace WebProxy.DiyTransform.DiyFeature
 {
     public enum W3CLevel
     {

@@ -1,8 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
-using Tool;
+using System.Threading.Tasks;
 using Tool.Utils.Data;
-using WebProxy.DiyTransform;
+using WebProxy.DiyTransform.End;
+using WebProxy.DiyTransform.Start;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.Transforms;
 using Yarp.ReverseProxy.Transforms.Builder;
@@ -16,8 +17,20 @@ namespace WebProxy.DiyTransformFactory
         False
     }
 
-    public abstract class DiyRequestTransform : RequestTransform
+    public abstract class DiyRequestTransform(ILogger logger, bool enabled) : RequestTransform
     {
+        protected readonly ILogger _logger = logger;
+        protected bool _enabled = enabled;
+
+        public override ValueTask ApplyAsync(RequestTransformContext transformContext)
+        {
+            if (!_enabled) return ValueTask.CompletedTask;
+            if (transformContext.CancellationToken.IsCancellationRequested) return ValueTask.CompletedTask;
+            return DiyApplyAsync(transformContext);
+        }
+
+        public abstract ValueTask DiyApplyAsync(RequestTransformContext transformContext);
+
         public abstract bool ResetConf(IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig);
 
         public static TransformType CreateTransform(string typekey, ILogger _logger, ILoggerFactory _loggerFactory, IReadOnlyDictionary<string, string> transformValues, RouteConfig route, out DiyRequestTransform transform)
@@ -30,13 +43,26 @@ namespace WebProxy.DiyTransformFactory
                 "Cors" => CorsTransformStart.CreateTransform(_logger, _loggerFactory, transformValues, route, out transform),
                 "StaticFile" => StaticFileTransformStart.CreateTransform(_logger, _loggerFactory, transformValues, route, out transform),
                 "Location" => LocationTransformStart.CreateTransform(_logger, _loggerFactory, transformValues, route, out transform),
+                "HeaderDistinctValue" => HeaderDistinctValueTransformStart.CreateTransform(_logger, _loggerFactory, transformValues, route, out transform),
                 _ => DiyTransformSet.UnknownDiyType(typekey, _logger, out transform),
             };
         }
     }
 
-    public abstract class DiyResponseTransform : ResponseTransform
+    public abstract class DiyResponseTransform(ILogger logger, bool enabled) : ResponseTransform
     {
+        protected readonly ILogger _logger = logger;
+        protected bool _enabled = enabled;
+
+        public override ValueTask ApplyAsync(ResponseTransformContext transformContext) 
+        {
+            if (!_enabled) return ValueTask.CompletedTask;
+            if (transformContext.CancellationToken.IsCancellationRequested) return ValueTask.CompletedTask;
+            return DiyApplyAsync(transformContext);
+        }
+
+        public abstract ValueTask DiyApplyAsync(ResponseTransformContext transformContext);
+
         public abstract bool ResetConf(IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig);
 
         public static TransformType CreateTransform(string typekey, ILogger _logger, ILoggerFactory _loggerFactory, IReadOnlyDictionary<string, string> transformValues, RouteConfig route, out DiyResponseTransform transform)

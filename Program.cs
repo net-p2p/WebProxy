@@ -32,6 +32,10 @@ namespace WebProxy
         private static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .UseDiyServiceProvider()
+#if !DOCKER
+                .UseWindowsService()
+                .UseSystemd()
+#endif
                 .ConfigureHostConfiguration((config) =>
                 {
                     string configPath = Exp.IsDocker ? Exp.IsDockerAppsettings() : Exp.IsAppsettings();
@@ -102,11 +106,6 @@ namespace WebProxy
                         logging.AddLogSave();
                     })
                     .UseStartup<Startup>();
-                })
-#if !DOCKER
-                .UseWindowsService(conf => Environment.CurrentDirectory = AppContext.BaseDirectory) //确保程序访问在安装目录
-                .UseSystemd()
-#endif
-            ;
+                });
     }
 }

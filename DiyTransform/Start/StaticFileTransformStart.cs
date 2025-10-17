@@ -12,34 +12,25 @@ using WebProxy.DiyTransformFactory;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.Transforms;
 
-namespace WebProxy.DiyTransform
+namespace WebProxy.DiyTransform.Start
 {
     public class StaticFileTransformStart : DiyRequestTransform
     {
-        private readonly ILogger _logger;
-        private bool _enabled;
         private string _rootPath;
         private string _defaultFile;
         private string _pathPrefix;
         private string _notFoundPage; // 新增字段：404页面
 
-        public StaticFileTransformStart(ILogger logger, bool enabled, string rootPath, string defaultFile, string pathPrefix, string notFoundPage)
+        public StaticFileTransformStart(ILogger logger, bool enabled, string rootPath, string defaultFile, string pathPrefix, string notFoundPage) : base(logger, enabled)
         {
-            _logger = logger;
-            _enabled = enabled;
             _rootPath = string.IsNullOrEmpty(rootPath) ? "wwwroot" : rootPath;
             _defaultFile = string.IsNullOrEmpty(defaultFile) ? "index.html" : defaultFile;
             _pathPrefix = pathPrefix ?? "/";
             _notFoundPage = notFoundPage; // 初始化404页面
         }
 
-        public override async ValueTask ApplyAsync(RequestTransformContext transformContext)
+        public override async ValueTask DiyApplyAsync(RequestTransformContext transformContext)
         {
-            if (!_enabled)
-            {
-                return;
-            }
-
             var context = transformContext.HttpContext;
             var requestPath = context.Request.Path.Value;
 

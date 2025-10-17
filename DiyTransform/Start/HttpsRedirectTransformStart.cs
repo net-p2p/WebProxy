@@ -1,6 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Primitives;
+﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,30 +8,21 @@ using WebProxy.DiyTransformFactory;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.Transforms;
 
-namespace WebProxy.DiyTransform
+namespace WebProxy.DiyTransform.Start
 {
     public class HttpsRedirectTransformStart : DiyRequestTransform
     {
-        private readonly ILogger _logger;
         private int _statusCode;
-        private bool _enabled;
         private string _redirectUrl;
 
-        public HttpsRedirectTransformStart(ILogger logger, int statusCode, bool enabled, string redirectUrl)
+        public HttpsRedirectTransformStart(ILogger logger, int statusCode, bool enabled, string redirectUrl) : base(logger, enabled)
         {
-            _logger = logger;
             _statusCode = statusCode;
-            _enabled = enabled;
             _redirectUrl = redirectUrl;
         }
 
-        public override ValueTask ApplyAsync(RequestTransformContext transformContext)
+        public override ValueTask DiyApplyAsync(RequestTransformContext transformContext)
         {
-            if (!_enabled)
-            {
-                return ValueTask.CompletedTask;
-            }
-
             var context = transformContext.HttpContext;
             var scheme = context.Request.Scheme;
             var forwardedProto = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault();

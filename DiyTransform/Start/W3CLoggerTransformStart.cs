@@ -8,63 +8,56 @@ using System.Security.Cryptography.Xml;
 using System.Threading.Tasks;
 using Tool.Utils;
 using Tool.Web;
-using WebProxy.DiyTransform.Feature;
+using WebProxy.DiyTransform.DiyFeature;
 using WebProxy.DiyTransform.Validate;
 using WebProxy.DiyTransformFactory;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.Transforms;
 
-namespace WebProxy.DiyTransform
+namespace WebProxy.DiyTransform.Start
 {
     public class W3CLoggerTransformStart : DiyRequestTransform
     {
-        private readonly ILogger _logger;
         private string _logName;
-        private bool _enabled;
         private W3CLevel _level;
 
         //private string logPrefix => $"Log/W3CLogger/{_logName}/";
 
-        public W3CLoggerTransformStart(ILogger logger, bool enabled, W3CLevel level, string logName)
+        public W3CLoggerTransformStart(ILogger logger, bool enabled, W3CLevel level, string logName) : base(logger, enabled)
         {
-            _logger = logger;
-            _enabled = enabled;
             _level = level;
             _logName = logName;
         }
 
-        public override async ValueTask ApplyAsync(RequestTransformContext transformContext)
+        public override async ValueTask DiyApplyAsync(RequestTransformContext transformContext)
         {
-            if (_enabled)
+            var context = transformContext.HttpContext;
+
+            var (scheme, host) = context.GetSchemeHost();
+            var loggerFeature = new W3CLoggerFeature()
             {
-                var context = transformContext.HttpContext;
+                Scheme = scheme,
+                Host = host,
+                Method = context.Request.Method,
+                Path = context.Request.Path,
+                Protocol = context.Request.Protocol,
+                UserIp = context.GetUserIp(),
+                Query = context.Request.QueryString.Value ?? string.Empty,
+                //UserAgent = context.Request.Headers.TryGetValue("User-Agent", out var value) ? value : "N/A"
+            };
+            await loggerFeature.ReadRequestContentAsync(context, _level);
+            context.Features.Set(loggerFeature);
 
-                var (scheme, host) = context.GetSchemeHost();
-                var loggerFeature = new W3CLoggerFeature()
-                {
-                    Scheme = scheme,
-                    Host = host,
-                    Method = context.Request.Method,
-                    Path = context.Request.Path,
-                    Protocol = context.Request.Protocol,
-                    UserIp = context.GetUserIp(),
-                    Query = context.Request.QueryString.Value ?? string.Empty,
-                    //UserAgent = context.Request.Headers.TryGetValue("User-Agent", out var value) ? value : "N/A"
-                };
-                await loggerFeature.ReadRequestContentAsync(context, _level);
-                context.Features.Set(loggerFeature);
-
-                //string txt = $"{scheme} {host} {loggerFeature.Method} {loggerFeature.Path}{loggerFeature.Query} {loggerFeature.UserIp}";
-                //switch (_level)
-                //{
-                //    case W3CLevel.Debug:
-                //        Log.Debug($"Start[{context.TraceIdentifier}] {loggerFeature.Protocol} {txt} {loggerFeature.UserAgent} {await W3CLoggerFeature.ReadRequestContentAsync(context)}", logPrefix);
-                //        break;
-                //    case W3CLevel.Info:
-                //        Log.Info($"Start[{context.TraceIdentifier}] {txt}", logPrefix);
-                //        break;
-                //}
-            }
+            //string txt = $"{scheme} {host} {loggerFeature.Method} {loggerFeature.Path}{loggerFeature.Query} {loggerFeature.UserIp}";
+            //switch (_level)
+            //{
+            //    case W3CLevel.Debug:
+            //        Log.Debug($"Start[{context.TraceIdentifier}] {loggerFeature.Protocol} {txt} {loggerFeature.UserAgent} {await W3CLoggerFeature.ReadRequestContentAsync(context)}", logPrefix);
+            //        break;
+            //    case W3CLevel.Info:
+            //        Log.Info($"Start[{context.TraceIdentifier}] {txt}", logPrefix);
+            //        break;
+            //}
         }
 
         public override bool ResetConf(IReadOnlyDictionary<string, string> transformValues, RouteConfig routeConfig)

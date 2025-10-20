@@ -220,6 +220,11 @@ namespace WebProxy.Entiy
             //return X509CertificateLoader.LoadPkcs12(pfxBytes, null, flags);
         }
 
+        public override string ToString()
+        {
+            return isDispose ? "已被释放！" : certificateContext.TargetCertificate.Subject;
+        }
+
         /// <summary>
         /// 解析PEM格式的证书链，提取所有证书的PEM字符串位置
         /// </summary>

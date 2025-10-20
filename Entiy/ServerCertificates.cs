@@ -39,6 +39,12 @@ namespace WebProxy.Entiy
             GetServerCertificate();
         }
 
+        private bool GetDefaultCert(out Certificates _certificate)
+        {
+            const string domain = "Default";
+            return Certificates.TryGetValue(domain, out _certificate);
+        }
+
         public void Reset()
         {
             GetServerCertificate();
@@ -46,15 +52,20 @@ namespace WebProxy.Entiy
 
         public bool GetSsl(ConnectionContext context, string domain, out Certificates certificate)
         {
-            if (string.IsNullOrEmpty(domain)) domain = "Default";
-            var _contains = Certificates.TryGetValue(domain, out var _certificate);
-            if (_contains)
+            if (!string.IsNullOrEmpty(domain) && Certificates.TryGetValue(domain, out var _certificate))
             {
                 certificate = _certificate;
                 return true;
             }
-            if (domain is not "Default") logger.LogError("连接[{EndPoint}]：{Domain} 握手失败，因无可用证书！", context.RemoteEndPoint, domain);
-            else logger.LogDebug("连接[{Remote}]：{Local} 无域名适配！", context.RemoteEndPoint, context.LocalEndPoint);
+            if (GetDefaultCert(out _certificate))
+            {
+                certificate = _certificate;
+                return true;
+            }
+            if (logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug("连接[{Remote}]:[{Local}]=[{Domain}] 无域名适配也无默认证书兜底！", context.RemoteEndPoint, context.LocalEndPoint, domain);
+            }
             certificate = null;
             return false;
         }
@@ -195,6 +206,7 @@ namespace WebProxy.Entiy
             foreach (var section in sections)
             {
                 var domain = section.Key;
+                if (domain.Equals("AliasHosts")) continue;
                 if (string.IsNullOrWhiteSpace(domain))
                 {
                     logger.LogError("HttpSsl 集合下的配置信息，Domain 存在空值，请查看配置文件！");
@@ -217,11 +229,15 @@ namespace WebProxy.Entiy
                                 return false;
                             }
                         }
-                        _certEntiys.Add(new CertEntiy { 
-                            Domain = domain, SslType = ssltype, Arg0 = arg0, Arg1 = arg1, 
-                            ApplicationProtocols = section.GetApplicationProtocols(), 
-                            EnabledSslProtocols = section.GetSslProtocols(), 
-                            TlsCiphers = section.GetTlsCiphers(), 
+                        _certEntiys.Add(new CertEntiy
+                        {
+                            Domain = domain,
+                            SslType = ssltype,
+                            Arg0 = arg0,
+                            Arg1 = arg1,
+                            ApplicationProtocols = section.GetApplicationProtocols(),
+                            EnabledSslProtocols = section.GetSslProtocols(),
+                            TlsCiphers = section.GetTlsCiphers(),
                             AllowRenegotiation = section.GetConfBool("AllowRenegotiation", false),
                             AllowTlsResume = section.GetConfBool("AllowTlsResume", true),
                             ClientCertificateRequired = section.GetConfBool("ClientCertificateRequired", false),
@@ -255,16 +271,48 @@ namespace WebProxy.Entiy
                 if (!certEntiys.Any(entiy => entiy.Domain.Equals(pair.Key)))
                 {
                     var certificate = pair.Value;
-                    logger.LogInformation("移除证书[{ssltype}]：{Domain}", certificate.SslType, certificate.Domain);
-                    certificate.Delete();
+                    if (pair.Key.Equals(certificate.Domain, StringComparison.OrdinalIgnoreCase))
+                    {
+                        logger.LogInformation("移除证书[{ssltype}]：{Domain}", certificate.SslType, certificate.Domain);
+                        certificate.Delete();
+                    }
+                    Certificates.TryRemove(pair);
+                }
+                else if (!pair.Key.Equals(pair.Value.Domain, StringComparison.OrdinalIgnoreCase))
+                {
                     Certificates.TryRemove(pair);
                 }
             }
         }
 
+        private Dictionary<string, string[]> TryCertHosts()
+        {
+            var sections = configuration.GetSection("HttpSsl:AliasHosts").GetChildren();
+            Dictionary<string, string[]> pairs = new(StringComparer.OrdinalIgnoreCase);
+            foreach (var section in sections)
+            {
+                var domain = section.Key;
+                if (string.IsNullOrEmpty(domain))
+                {
+                    logger.LogError("域名别名 [AliasHosts]：不能为空。");
+                    continue;
+                }
+                HashSet<string> hosts = new(StringComparer.OrdinalIgnoreCase);
+                foreach (var item in section.GetChildren())
+                {
+                    string host = item.Value;
+                    if (!string.IsNullOrEmpty(host) && !domain.Equals(host, StringComparison.OrdinalIgnoreCase))
+                    {
+                        hosts.Add(host);
+                    }
+                }
+                pairs.TryAdd(section.Key, [.. hosts]);
+            }
+            return pairs;
+        }
+
         private void GetServerCertificate()
         {
-            //var localhostCert = CertificateLoader.LoadFromStoreCert("localhost", "My", StoreLocation.CurrentUser, allowInvalid: true); //默认本地证书
             //var certificate2 = CertificateLoader.LoadFromStoreCert(sslStreamCertificate.TargetCertificate.Subject, sslStreamCertificate.TargetCertificate.Issuer, StoreLocation.LocalMachine, true);
             if (TryCertEntiys(out List<CertEntiy> certEntiys))
             {
@@ -302,6 +350,18 @@ namespace WebProxy.Entiy
                             return certificate;
                         }
                     });
+                }
+            }
+
+            var certHosts = TryCertHosts(); //别名域名绑定证书（关联域名头）
+            foreach (var pair in Certificates.ToArray())
+            {
+                if (certHosts.TryGetValue(pair.Key, out string[] hosts))
+                {
+                    foreach (var host in hosts)
+                    {
+                        Certificates.TryAdd(host, pair.Value);
+                    }
                 }
             }
         }

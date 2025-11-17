@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Tool.Utils;
 using Tool.Web;
+using WebProxy.DiyPolicy;
 using WebProxy.DiyTransformFactory;
 using WebProxy.Entiy;
 using WebProxy.Extensions;
@@ -28,7 +29,7 @@ namespace WebProxy
         {
             SslCertificates = certificates;
             logger = loggerFactory.CreateLogger("Proxy");
-           _inner = configuration;
+            _inner = configuration;
             RegisterInnerChangeCallback();
         }
 
@@ -83,15 +84,7 @@ namespace WebProxy
         {
             SetFormOptions(services);// 配置输入大小
 
-            services.AddRequestTimeouts(options =>
-            {
-                options.DefaultPolicy = new Microsoft.AspNetCore.Http.Timeouts.RequestTimeoutPolicy() { Timeout = TimeSpan.FromSeconds(100) };
-                for (int i = 1; i <= 60; i++)
-                {
-                    options.AddPolicy($"{i}s", TimeSpan.FromSeconds(i));
-                    options.AddPolicy($"{i}m", TimeSpan.FromMinutes(i));
-                }
-            });
+            services.AddYarpPolicies(Configuration);
 
             services.AddSingleton<IServicesCore, ServicesCore>(); //可通过协议通讯
             services.AddSingleton<ServerCertificates>(); //证书服务
@@ -116,7 +109,9 @@ namespace WebProxy
             }
 
             app.UseRouting();
-            app.UseRequestTimeouts();
+
+            app.UseYarpPolicies();
+
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapReverseProxy(proxyPipeline =>

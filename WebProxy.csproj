@@ -16,9 +16,9 @@
     <NeutralLanguage>zh-Hans</NeutralLanguage>
     <UserSecretsId>8263e7ab-48a8-4d0d-9c7f-471f237b9bf7</UserSecretsId>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
-    <Version>3.8.0</Version>
+    <Version>3.8.1</Version>
     <Authors>nixue</Authors>
-    <AssemblyVersion>3.7.9</AssemblyVersion>
+    <AssemblyVersion>3.8.0</AssemblyVersion>
     <FileVersion>3.8.0</FileVersion>
     <SignAssembly>False</SignAssembly>
     <AssemblyOriginatorKeyFile></AssemblyOriginatorKeyFile>
